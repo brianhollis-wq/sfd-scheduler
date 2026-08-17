@@ -311,8 +311,8 @@ export default function MotPage() {
       const json = await res.json()
       setData(json)
       setLastRefresh(new Date())
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }

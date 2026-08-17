@@ -344,8 +344,8 @@ export default function DebitDaysPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed to load')
       setData(json)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }

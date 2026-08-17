@@ -256,8 +256,8 @@ function CallbackDialog({
       if (result.error) { setErr(result.error); setBusy(false); return }
       onClose()
       onRefresh()
-    } catch (e: any) {
-      setErr(e.message ?? 'Unknown error')
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Unknown error')
       setBusy(false)
     }
   }
@@ -370,8 +370,8 @@ export default function CallbackPage() {
       if (json.error) throw new Error(json.error)
       setData(json)
       setLastUpdated(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))
-    } catch (e: any) {
-      setError(e.message ?? 'Unknown error')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
@@ -390,11 +390,11 @@ export default function CallbackPage() {
     return () => { if (refreshTimer.current) clearInterval(refreshTimer.current) }
   }, [selectedDate, fetchData])
 
-  function openCallback(member: Member, listType: string, _fy: number) {
+  function openCallback(member: Member, listType: string) {
     setDialog({ mode: 'callback', member, listType, fiscalYear: data?.fiscalYear ?? 0 })
   }
 
-  function openCorrect(member: Member, listType: string, _fy: number) {
+  function openCorrect(member: Member, listType: string) {
     setDialog({ mode: 'correct', member, listType, fiscalYear: data?.fiscalYear ?? 0 })
   }
 

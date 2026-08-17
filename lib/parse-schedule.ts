@@ -216,7 +216,7 @@ const INLINE_TIME_RANGE_RE = /\b(\d{2}):(\d{2})\s*[-–]\s*(\d{2}):(\d{2})\b/
  *   - Trailing asterisks, daggers, or other annotation marks (e.g. "Cody Miller *")
  */
 export function parseName(raw: string): { firstName: string; lastName: string } | null {
-  let s = raw
+  const s = raw
     .replace(/\(.*?\)/g, '')                          // strip (...)
     .replace(/\d{3}[\-\s]?\d{3}[\-\s]?\d{4}/g, '')   // strip phone numbers
     .replace(/\b\d{2}:\d{2}\s*[-–]\s*\d{2}:\d{2}\b/g, '') // strip inline time ranges (07:00-17:00)
