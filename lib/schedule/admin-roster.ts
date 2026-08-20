@@ -54,6 +54,12 @@ export interface PermanentRosterEntry {
    * real post rather than disappearing.
    */
   vacant?: boolean
+  /**
+   * Radio call sign, where the post has one. Shown on the board in place of
+   * the internal unit ID, which is a database key and not what anyone on the
+   * floor calls this person.
+   */
+  callSign?: string
   /** Days worked, 0 = Sunday. */
   days: readonly number[]
   /** Local start/end clock times, 24h. Pacific, per shift-window.ts. */
@@ -67,22 +73,22 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   // ── Community Risk Reduction — deputy fire marshals, weekdays 0800–1700 ────
   // The zone numbers beside each name on the CRR roster (e.g. "Roth (FM2) - 5,
   // 11") are the districts they cover, not a schedule.
-  { apparatusId: 'DFM-1', position: 'Fire Marshal', firstName: 'Sean',   lastName: 'Mansfield', employeeId: 554, days: MON_FRI, start: [8, 0], end: [17, 0] },
-  { apparatusId: 'DFM-2', position: 'DFM',          firstName: 'Sara',   lastName: 'Roth',      employeeId: 3524, days: MON_FRI, start: [8, 0], end: [17, 0] },
-  { apparatusId: 'DFM-3', position: 'DFM',          firstName: 'Justin', lastName: 'Guinan',    employeeId: 6762, days: MON_FRI, start: [8, 0], end: [17, 0] },
-  { apparatusId: 'DFM-4', position: 'DFM',          firstName: 'Jordan', lastName: 'Wakem',     employeeId: 6763, days: MON_FRI, start: [8, 0], end: [17, 0] },
-  { apparatusId: 'DFM-5', position: 'DFM',          firstName: 'Janet',  lastName: 'Campbell',  employeeId: 3103, days: MON_FRI, start: [8, 0], end: [17, 0] },
-  { apparatusId: 'DFM-6', position: 'DFM',          firstName: 'Robert', lastName: 'Johnson',   employeeId: 5855, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'DFM-1', position: 'Fire Marshal', callSign: 'FM1', firstName: 'Sean',   lastName: 'Mansfield', employeeId: 554, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'DFM-2', position: 'DFM',          callSign: 'FM2', firstName: 'Sara',   lastName: 'Roth',      employeeId: 3524, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'DFM-3', position: 'DFM',          callSign: 'FM3', firstName: 'Justin', lastName: 'Guinan',    employeeId: 6762, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'DFM-4', position: 'DFM',          callSign: 'FM4', firstName: 'Jordan', lastName: 'Wakem',     employeeId: 6763, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'DFM-5', position: 'DFM',          callSign: 'FM5', firstName: 'Janet',  lastName: 'Campbell',  employeeId: 3103, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'DFM-6', position: 'DFM',          callSign: 'FM6', firstName: 'Robert', lastName: 'Johnson',   employeeId: 5855, days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // Inspectors — weekdays 0800–1700, no after-hours call rotation.
   { apparatusId: 'INSP-1', position: 'Inspector I', firstName: 'Diego',  lastName: 'Legorreta', employeeId: 7490, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'INSP-2', position: 'Inspector I', firstName: 'Arthur', lastName: 'Zhiryada',  employeeId: 7491, days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // ── Training division ─────────────────────────────────────────────────────
-  { apparatusId: 'TR-DC',   position: 'DC Training', firstName: 'Mike', lastName: 'Walker',      employeeId: 7536, days: MON_FRI, start: [8, 0], end: [17, 0] },
-  { apparatusId: 'TR-CPT1', position: 'TO2',         firstName: 'Scott',   lastName: 'Miller',      employeeId: 1733, days: MON_THU, start: [7, 0], end: [17, 0] },
-  { apparatusId: 'TR-CPT2', position: 'TO3',         firstName: 'Paul',    lastName: 'Bridgehouse', employeeId: 872, days: MON_THU, start: [7, 0], end: [17, 0] },
-  { apparatusId: 'TR-AO',   position: 'TO4',         firstName: 'Matthew', lastName: 'Miller',      employeeId: 3580, days: TUE_FRI, start: [7, 0], end: [17, 0] },
+  { apparatusId: 'TR-DC',   position: 'DC Training', callSign: 'C6', firstName: 'Mike', lastName: 'Walker',      employeeId: 7536, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'TR-CPT1', position: 'Training Officer', callSign: 'TO2', firstName: 'Scott',   lastName: 'Miller',      employeeId: 1733, days: MON_THU, start: [7, 0], end: [17, 0] },
+  { apparatusId: 'TR-CPT2', position: 'Training Officer', callSign: 'TO3', firstName: 'Paul',    lastName: 'Bridgehouse', employeeId: 872, days: MON_THU, start: [7, 0], end: [17, 0] },
+  { apparatusId: 'TR-AO',   position: 'Training Officer', callSign: 'TO4', firstName: 'Matthew', lastName: 'Miller',      employeeId: 3580, days: TUE_FRI, start: [7, 0], end: [17, 0] },
   // Peggy Lowry is a volunteer, so she has no employee ID — she and the
   // contract Medical Director are the only two people in the personnel master
   // without one. She is therefore the single post still resolved by name, and
@@ -93,9 +99,9 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   { apparatusId: 'TR-SA',   position: 'Staff',       firstName: 'Peggy',   lastName: 'Lowry',       days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // ── EMS division ──────────────────────────────────────────────────────────
-  { apparatusId: 'EMS-DC',    position: 'DC EMS',          firstName: 'Steve', lastName: 'Boughey', employeeId: 7549, days: MON_FRI, start: [8, 0], end: [17, 0] },
-  { apparatusId: 'EMS-COORD', position: 'EMS Coordinator', firstName: 'Darrin',  lastName: 'George',  employeeId: 2587, days: MON_THU, start: [7, 0], end: [17, 0] },
-  { apparatusId: 'EMS-TRN',   position: 'EMS Trainer',     firstName: 'Katie',   lastName: 'Cardona', employeeId: 7397, days: MON_THU, start: [7, 0], end: [17, 0] },
+  { apparatusId: 'EMS-DC',    position: 'DC EMS',          callSign: 'C5', firstName: 'Steve', lastName: 'Boughey', employeeId: 7549, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'EMS-COORD', position: 'EMS Coordinator', callSign: 'EMS1', firstName: 'Darrin',  lastName: 'George',  employeeId: 2587, days: MON_THU, start: [7, 0], end: [17, 0] },
+  { apparatusId: 'EMS-TRN',   position: 'EMS Trainer',     callSign: 'EMS2', firstName: 'Katie',   lastName: 'Cardona', employeeId: 7397, days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'EMS-PDA1',  position: 'Paramedic Data Analyst', firstName: 'Sam',    lastName: 'Ruck',       employeeId: 7335, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'EMS-PDA2',  position: 'Paramedic Data Analyst', firstName: 'Emily',  lastName: 'Rodriguez',  employeeId: 7338, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'EMS-BILL',  position: 'Billing Specialist',     firstName: 'Briley', lastName: 'Davis',      employeeId: 7455, days: MON_FRI, start: [8, 0], end: [17, 0] },
@@ -110,18 +116,18 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
 
   // ── Administration — all weekdays 0800–1700 ───────────────────────────────
   // Office of the Fire Chief
-  { apparatusId: 'C-1',   position: 'Fire Chief', firstName: 'David', lastName: 'Gerboth',  employeeId: 7184, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'C-1',   position: 'Fire Chief', callSign: 'C1', firstName: 'David', lastName: 'Gerboth',  employeeId: 7184, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'FCO-1', position: 'Staff',      firstName: 'Gina',  lastName: 'Cepeda',   employeeId: 2459, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'FCO-2', position: 'Staff',      firstName: 'Dora',  lastName: 'Cardenas', employeeId: 6400, days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // Emergency Operations Division
-  { apparatusId: 'C-2',    position: 'AC Operations',      firstName: 'Tige', lastName: 'Harmon',     employeeId: 919, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'C-2',    position: 'AC Operations',      callSign: 'C2', firstName: 'Tige', lastName: 'Harmon',     employeeId: 919, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'DC-OPS', position: 'DC Operations',      firstName: '',     lastName: '',           days: MON_FRI, start: [8, 0], end: [17, 0], vacant: true },
-  { apparatusId: 'C-4',    position: 'DC Special Projects', firstName: 'Cord', lastName: 'Von Derahe', employeeId: 1120, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'C-4',    position: 'DC Special Projects', callSign: 'C4', firstName: 'Cord', lastName: 'Von Derahe', employeeId: 1120, days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // Business Operations Division
-  { apparatusId: 'C-3',   position: 'AC Business Operations', firstName: 'Brian', lastName: 'Carrara',    employeeId: 3375, days: MON_FRI, start: [8, 0], end: [17, 0] },
-  { apparatusId: 'EM-1',  position: 'Emergency Manager',      firstName: 'Joe',   lastName: 'Hutchinson', employeeId: 6936, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'C-3',   position: 'AC Business Operations', callSign: 'C3', firstName: 'Brian', lastName: 'Carrara',    employeeId: 3375, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'EM-1',  position: 'Emergency Manager',      callSign: 'EM1', firstName: 'Joe',   lastName: 'Hutchinson', employeeId: 6936, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'BOD-1', position: 'Staff',                  firstName: 'Dean',  lastName: 'Chambers',   employeeId: 1948, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'BOD-2', position: 'Staff',                  firstName: 'Kelli', lastName: 'Knowles',    employeeId: 6399, days: MON_FRI, start: [8, 0], end: [17, 0] },
 
@@ -156,6 +162,16 @@ export function permanentRosterForDate(shiftDate: string): PermanentRosterEntry[
 /** The time window an entry works on the given date. */
 export function windowForEntry(entry: PermanentRosterEntry, shiftDate: string): ShiftWindow {
   return rangeShiftWindow(shiftDate, entry.start[0], entry.start[1], entry.end[0], entry.end[1])
+}
+
+/**
+ * Radio call sign for a unit, or null where the post has none.
+ *
+ * Posts without one — the inspectors, the civilian staff, the buyers — are
+ * shown by unit ID, since there is nothing better to call them.
+ */
+export function callSignForApparatus(apparatusId: string): string | null {
+  return PERMANENT_ROSTER.find((e) => e.apparatusId === apparatusId)?.callSign ?? null
 }
 
 /** Every apparatus this roster can write to — used to seed and to validate. */

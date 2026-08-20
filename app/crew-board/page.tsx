@@ -10,6 +10,7 @@ import {
 } from '@/lib/schedule/assignment-types'
 import { CREW_BOARD_COLUMNS } from '@/lib/schedule/daily-assignment'
 import { rankLabel, rankSortValue } from '@/lib/employees/rank'
+import { callSignForApparatus } from '@/lib/schedule/admin-roster'
 import {
   ADMIN_UNITS,
   apparatusCountsTowardMinimum,
@@ -199,7 +200,9 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
       <div className={`${headerBg} px-3 py-2 flex items-center justify-between`}>
         <div className="flex items-center gap-2">
           <StatusDot color={color} />
-          <span className="font-mono font-bold text-white tracking-widest text-sm">{app.id}</span>
+          <span className="font-mono font-bold text-white tracking-widest text-sm">
+            {callSignForApparatus(app.id) ?? app.id}
+          </span>
           {deployedLabel && (
             <span className="text-[9px] font-mono font-bold text-orange-300 bg-orange-900/30 border border-orange-700/40 rounded px-1.5 py-0.5 tracking-widest">
               {deployedLabel}
