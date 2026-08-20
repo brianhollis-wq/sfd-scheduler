@@ -107,8 +107,10 @@ async function buildPermanentRosterRows(
       continue
     }
 
+    // A vacant post is written with no employee so the seat still shows on the
+    // board. Resolving a blank name would only ever fail.
     let employeeId = entry.employeeId ?? null
-    if (employeeId == null) {
+    if (employeeId == null && !entry.vacant) {
       const emp = await findEmployee(supabase, entry.firstName, entry.lastName)
       if (!emp) {
         unmatched.push(`${entry.firstName} ${entry.lastName} (${entry.apparatusId})`)
@@ -117,7 +119,7 @@ async function buildPermanentRosterRows(
       employeeId = emp.id
     }
 
-    if (pdfWindows.some((w) =>
+    if (employeeId != null && pdfWindows.some((w) =>
       w.employeeId === employeeId &&
       overlaps(entryWindow.startDt, entryWindow.endDt, w.startDt, w.endDt),
     )) {

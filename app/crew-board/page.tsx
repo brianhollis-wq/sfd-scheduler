@@ -38,7 +38,8 @@ type Apparatus = {
 
 type Assignment = {
   apparatus_id: string
-  employee_id: number
+  employee_id: number | null
+  position: string | null
   assignment_type: string
   start_dt: string | null
   end_dt: string | null
@@ -241,7 +242,7 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
       </div>
 
       <div className="px-3 py-2 min-h-[52px]">
-        {app.isAdmin && onDutyCrew.length === 0 ? (
+        {app.isAdmin && app.crew.length === 0 ? (
           <div className="text-zinc-600 text-xs font-mono italic">ADMIN — 40 HR STAFF</div>
         ) : app.computedUnstaffed && onDutyCrew.length === 0 ? (
           <div className="text-sky-600/70 text-xs font-mono italic">IN SERVICE — UNSTAFFED</div>
@@ -257,14 +258,18 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
               const full = isFullShift(a.start_dt, a.end_dt)
               const timeStr = `${fmtTime(a.start_dt)}–${fmtTime(a.end_dt)}`
               return (
-                <li key={a.employee_id} className="flex items-center gap-2 text-xs font-mono">
-                  <span className="text-[#c9a84c] w-14 shrink-0">
-                    {a.employees ? formatRank(a.employees.rank) : '—'}
+                <li key={`${a.apparatus_id}-${a.employee_id ?? 'vacant'}-${a.position ?? ''}`} className="flex items-center gap-2 text-xs font-mono">
+                  {/* Administration and specialty posts are identified by job
+                      title; line crew by fire rank. */}
+                  <span className={`text-[#c9a84c] shrink-0 ${app.isAdmin ? 'w-32' : 'w-14'}`}>
+                    {app.isAdmin
+                      ? (a.position ?? (a.employees ? formatRank(a.employees.rank) : '—'))
+                      : (a.employees ? formatRank(a.employees.rank) : '—')}
                   </span>
-                  <span className="text-zinc-200 flex-1">
+                  <span className={`flex-1 ${a.employees ? 'text-zinc-200' : 'text-amber-500/70 italic'}`}>
                     {a.employees
                       ? `${a.employees.last_name}, ${a.employees.first_name.charAt(0)}.`
-                      : '—'}
+                      : 'VACANT'}
                   </span>
                   {a.employees?.is_paramedic && (
                     <span className="text-blue-400 text-[9px] font-bold tracking-widest">PM</span>
@@ -613,7 +618,9 @@ export default async function StaffingBoard({
   if (asErr) return <ErrorScreen err={asErr} />
 
   if (dateData && dateData.length > 0) {
-    assignments = dateData as Assignment[]
+    // PostgREST types the embedded `employees` resource as an array even though
+    // this is a to-one join, so the shapes never align directly.
+    assignments = dateData as unknown as Assignment[]
   } else if (selectedDate === today) {
     // Only fall back to most recent date when viewing today with no data
     const { data: latest } = await supabase
@@ -631,7 +638,7 @@ export default async function StaffingBoard({
           'apparatus_id, employee_id, assignment_type, start_dt, end_dt, employees(first_name, last_name, rank, badge_number, is_paramedic, shift_assignment)'
         )
         .eq('shift_date', shiftDate)
-      assignments = (fallbackData ?? []) as Assignment[]
+      assignments = (fallbackData ?? []) as unknown as Assignment[]
     }
   }
 
@@ -727,9 +734,8 @@ export default async function StaffingBoard({
     return hasCrew || isWeekday
   }
 
-  const sectionData = BOARD_SECTIONS.map((section) => ({
-    title: section.title,
-    apps: section.unitIds
+  const resolveUnits = (unitIds: readonly string[]) =>
+    unitIds
       .map((id) => apps.find((a) => a.id === id))
       .filter((a): a is AppWithCrew => a != null)
       .filter((a) => {
@@ -739,10 +745,22 @@ export default async function StaffingBoard({
           return isOnTemporaryAssignment(a.id, a.crew.filter((c) => isOnDuty(c.assignment_type)).length)
         }
         return showsWithoutCrew(a)
-      }),
-  })).filter((s) => s.apps.length > 0)
+      })
 
-  sectionData.forEach((s) => s.apps.forEach((a) => accountedIds.add(a.id)))
+  const sectionData = BOARD_SECTIONS.map((section) => ({
+    title:  section.title,
+    apps:   section.groups ? [] : resolveUnits(section.unitIds ?? []),
+    groups: section.groups
+      ? section.groups
+          .map((g) => ({ title: g.title, apps: resolveUnits(g.unitIds) }))
+          .filter((g) => g.apps.length > 0)
+      : [],
+  })).filter((s) => s.apps.length > 0 || s.groups.length > 0)
+
+  sectionData.forEach((s) => {
+    s.apps.forEach((a) => accountedIds.add(a.id))
+    s.groups.forEach((g) => g.apps.forEach((a) => accountedIds.add(a.id)))
+  })
 
   // Anything belonging to no station and no named section. Keeping this catch-all
   // means a new unit shows up somewhere rather than silently vanishing.
@@ -891,11 +909,29 @@ export default async function StaffingBoard({
               <div className="text-[10px] font-mono font-bold tracking-[0.2em] text-zinc-500 uppercase mb-3">
                 {section.title}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {section.apps.map((app) => (
-                  <ApparatusCard key={app.id} app={app} />
-                ))}
-              </div>
+
+              {section.groups.length > 0 ? (
+                <div className="space-y-4">
+                  {section.groups.map((group) => (
+                    <div key={group.title}>
+                      <div className="text-[10px] font-mono font-semibold tracking-[0.15em] text-zinc-600 uppercase mb-2 pl-0.5">
+                        {group.title}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                        {group.apps.map((app) => (
+                          <ApparatusCard key={app.id} app={app} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {section.apps.map((app) => (
+                    <ApparatusCard key={app.id} app={app} />
+                  ))}
+                </div>
+              )}
             </div>
           ))}
 

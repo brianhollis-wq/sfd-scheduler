@@ -27,11 +27,13 @@ export const ADMIN_UNITS = new Set<string>([
   // Fire prevention inspectors
   'INSP-1', 'INSP-2',
   // EMS division
-  'EMS-DC', 'EMS-COORD', 'EMS-TRN',
+  'EMS-DC', 'EMS-COORD', 'EMS-TRN', 'EMS-PDA1', 'EMS-PDA2', 'EMS-BILL', 'EMS-SA',
   // Training division
   'TR-DC', 'TR-CPT1', 'TR-CPT2', 'TR-AO',
-  // Administration — fire chief and assistant chiefs
-  'C-1', 'C-2', 'C-3',
+  // Administration — Office of the Fire Chief, Emergency Operations,
+  // Business Operations, Emergency Management
+  'C-1', 'C-2', 'C-3', 'C-4', 'DC-OPS', 'EM-1',
+  'FCO-1', 'FCO-2', 'BOD-1', 'BOD-2',
   // Light duty
   'LD',
 ])
@@ -67,10 +69,21 @@ export function isOnTemporaryAssignment(apparatusId: string, onDutyCrewCount: nu
   return temporaryAssignmentLabel(apparatusId) != null && onDutyCrewCount > 0
 }
 
+export interface BoardGroup {
+  /** Sub-heading inside a section, e.g. a division within Administration. */
+  title: string
+  unitIds: readonly string[]
+}
+
 export interface BoardSection {
   title: string
-  /** Units in display order. Absent or empty ones are simply not rendered. */
-  unitIds: readonly string[]
+  /**
+   * Units in display order. Absent or empty ones are simply not rendered.
+   * A section carries either a flat unit list or divisions, never both.
+   */
+  unitIds?: readonly string[]
+  /** Divisions rendered as sub-headings, in order. */
+  groups?: readonly BoardGroup[]
 }
 
 /**
@@ -84,13 +97,27 @@ export const BOARD_SECTIONS: readonly BoardSection[] = [
   { title: 'Specialty',               unitIds: ['LD', 'BR-5'] },
   { title: 'Community Risk Reduction', unitIds: ['DFM-1', 'DFM-2', 'DFM-3', 'DFM-4', 'DFM-5', 'DFM-6', 'INSP-1', 'INSP-2'] },
   { title: 'Training Division',        unitIds: ['TR-DC', 'TR-CPT1', 'TR-CPT2', 'TR-AO'] },
-  { title: 'EMS',                      unitIds: ['EMS-DC', 'EMS-COORD', 'EMS-TRN'] },
-  { title: 'Administration',           unitIds: ['C-1', 'C-2', 'C-3'] },
+  { title: 'EMS',                      unitIds: ['EMS-DC', 'EMS-COORD', 'EMS-TRN', 'EMS-PDA1', 'EMS-PDA2', 'EMS-BILL', 'EMS-SA'] },
+  {
+    title: 'Administration',
+    groups: [
+      { title: 'Office of the Fire Chief',   unitIds: ['C-1', 'FCO-1', 'FCO-2'] },
+      { title: 'Emergency Operations Division', unitIds: ['C-2', 'DC-OPS', 'C-4'] },
+      { title: 'Business Operations Division',  unitIds: ['C-3', 'EM-1', 'BOD-1', 'BOD-2'] },
+    ],
+  },
 ]
+
+/** A section's units, flattened across its divisions if it has any. */
+export function sectionUnitIds(section: BoardSection): string[] {
+  return section.groups
+    ? section.groups.flatMap((g) => [...g.unitIds])
+    : [...(section.unitIds ?? [])]
+}
 
 /** Every unit claimed by a named section. */
 export const SECTIONED_UNIT_IDS = new Set<string>(
-  BOARD_SECTIONS.flatMap((s) => [...s.unitIds]),
+  BOARD_SECTIONS.flatMap(sectionUnitIds),
 )
 
 /** Is this an administration or specialty assignment rather than a line unit? */

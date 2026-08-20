@@ -8,8 +8,10 @@
 -- the daily PDF. Those inserts are skipped for any apparatus_id absent from the
 -- apparatus table, so the units have to exist first.
 --
--- ADDS: DFM-6 (a sixth fire marshal, FM6) and INSP-1 / INSP-2 (the two
--- Inspector I positions).
+-- ADDS: DFM-6 (a sixth fire marshal, FM6), INSP-1 / INSP-2 (the two Inspector I
+-- positions), the four EMS division support posts, and the administration units
+-- for the Office of the Fire Chief, Emergency Operations Division, Business
+-- Operations Division and Emergency Management.
 --
 -- An earlier version of this file hardcoded status 'active' and failed with
 -- "invalid input value for enum apparatus_status". It no longer guesses: the
@@ -45,9 +47,28 @@ SELECT v.id,
        1,
        false
   FROM (VALUES
-          ('DFM-6',  'Deputy Fire Marshal 6'),
-          ('INSP-1', 'Inspector I - 1'),
-          ('INSP-2', 'Inspector I - 2')
+          -- Community Risk Reduction
+          ('DFM-6',    'Deputy Fire Marshal 6'),
+          ('INSP-1',   'Inspector I - 1'),
+          ('INSP-2',   'Inspector I - 2'),
+          -- EMS division
+          ('EMS-PDA1', 'Paramedic Data Analyst 1'),
+          ('EMS-PDA2', 'Paramedic Data Analyst 2'),
+          ('EMS-BILL', 'Billing Specialist'),
+          ('EMS-SA',   'EMS Staff Assistant'),
+          -- Office of the Fire Chief
+          ('C-1',      'Fire Chief'),
+          ('FCO-1',    'Fire Chief''s Office Staff 1'),
+          ('FCO-2',    'Fire Chief''s Office Staff 2'),
+          -- Emergency Operations Division
+          ('C-2',      'Assistant Chief of Operations'),
+          ('DC-OPS',   'Deputy Chief of Operations'),
+          ('C-4',      'Deputy Chief of Special Projects'),
+          -- Business Operations Division
+          ('C-3',      'Assistant Chief of Business Operations'),
+          ('EM-1',     'Emergency Manager'),
+          ('BOD-1',    'Business Operations Staff 1'),
+          ('BOD-2',    'Business Operations Staff 2')
        ) AS v(id, display_name)
 ON CONFLICT (id) DO NOTHING;
 
@@ -60,7 +81,7 @@ ON CONFLICT (id) DO NOTHING;
 -- 2. THE IMPORTANT ONE — do these people exist in the employees table?
 --    The roster resolves them by name (with nickname and alias fallbacks).
 --    Anyone absent here will be reported as unmatched on the import screen and
---    will not be committed. Expect 16 rows.
+--    will not be committed. Expect 30 rows.
 SELECT 'employee' AS check, id, first_name, last_name, rank
   FROM employees
  WHERE (first_name ILIKE 'Sean'    AND last_name ILIKE 'Mansfield')
@@ -80,4 +101,25 @@ SELECT 'employee' AS check, id, first_name, last_name, rank
     OR (first_name ILIKE 'Katie'   AND last_name ILIKE 'Cardona')
     OR (first_name ILIKE 'Scott'   AND last_name ILIKE 'Alt')
     OR (first_name ILIKE 'Amanda'  AND last_name ILIKE 'Palmer')
+    -- EMS division support
+    OR (first_name ILIKE 'Sam'     AND last_name ILIKE 'Ruck')
+    OR (first_name ILIKE 'Emily'   AND last_name ILIKE 'Rodriguez')
+    OR (first_name ILIKE 'Briley'  AND last_name ILIKE 'Davis')
+    OR (first_name ILIKE 'Kelly'   AND last_name ILIKE 'Richardson')
+    -- Administration
+    OR (first_name ILIKE 'David'   AND last_name ILIKE 'Gerboth')
+    OR (first_name ILIKE 'Gina'    AND last_name ILIKE 'Cepeda')
+    OR (first_name ILIKE 'Dora'    AND last_name ILIKE 'Cardenas')
+    OR (first_name ILIKE 'Tige'    AND last_name ILIKE 'Harmon')
+    OR (first_name ILIKE 'Cord'    AND last_name ILIKE 'Von Derahe')
+    OR (first_name ILIKE 'Brian'   AND last_name ILIKE 'Carrara')
+    OR (first_name ILIKE 'Joe'     AND last_name ILIKE 'Hutchinson')
+    OR (first_name ILIKE 'Dean'    AND last_name ILIKE 'Chambers')
+    OR (first_name ILIKE 'Kelli'   AND last_name ILIKE 'Knowles')
  ORDER BY last_name, first_name;
+
+-- 3. Administration and EMS support staff are 40-hour civilians and may not be
+--    in the employees table at all, which is set up around line personnel.
+--    Anyone missing from query 2 is reported on the import screen as unmatched
+--    and is not committed — they need an employees row before they will appear.
+--    The DC of Operations post is deliberately vacant and needs no employee.

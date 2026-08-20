@@ -38,6 +38,12 @@ export interface PermanentRosterEntry {
    * resolution entirely.
    */
   employeeId?: number
+  /**
+   * A post that exists but is currently unfilled. Written as an open vacancy
+   * (employee_id null) and never name-resolved, so it shows on the board as a
+   * real post rather than disappearing.
+   */
+  vacant?: boolean
   /** Days worked, 0 = Sunday. */
   days: readonly number[]
   /** Local start/end clock times, 24h. Pacific, per shift-window.ts. */
@@ -72,6 +78,27 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   { apparatusId: 'EMS-DC',    position: 'DC EMS',          firstName: 'Stephen', lastName: 'Boughey', days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'EMS-COORD', position: 'EMS Coordinator', firstName: 'Darrin',  lastName: 'George',  days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'EMS-TRN',   position: 'EMS Trainer',     firstName: 'Katie',   lastName: 'Cardona', days: MON_THU, start: [7, 0], end: [17, 0] },
+  { apparatusId: 'EMS-PDA1',  position: 'Paramedic Data Analyst', firstName: 'Sam',    lastName: 'Ruck',       days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'EMS-PDA2',  position: 'Paramedic Data Analyst', firstName: 'Emily',  lastName: 'Rodriguez',  days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'EMS-BILL',  position: 'Billing Specialist',     firstName: 'Briley', lastName: 'Davis',      days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'EMS-SA',    position: 'Staff Assistant',        firstName: 'Kelly',  lastName: 'Richardson', days: MON_FRI, start: [8, 0], end: [17, 0] },
+
+  // ── Administration — all weekdays 0800–1700 ───────────────────────────────
+  // Office of the Fire Chief
+  { apparatusId: 'C-1',   position: 'Fire Chief', firstName: 'David', lastName: 'Gerboth',  days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'FCO-1', position: 'Staff',      firstName: 'Gina',  lastName: 'Cepeda',   days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'FCO-2', position: 'Staff',      firstName: 'Dora',  lastName: 'Cardenas', days: MON_FRI, start: [8, 0], end: [17, 0] },
+
+  // Emergency Operations Division
+  { apparatusId: 'C-2',    position: 'AC Operations',      firstName: 'Tige', lastName: 'Harmon',     days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'DC-OPS', position: 'DC Operations',      firstName: '',     lastName: '',           days: MON_FRI, start: [8, 0], end: [17, 0], vacant: true },
+  { apparatusId: 'C-4',    position: 'DC Special Projects', firstName: 'Cord', lastName: 'Von Derahe', days: MON_FRI, start: [8, 0], end: [17, 0] },
+
+  // Business Operations Division
+  { apparatusId: 'C-3',   position: 'AC Business Operations', firstName: 'Brian', lastName: 'Carrara',    days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'EM-1',  position: 'Emergency Manager',      firstName: 'Joe',   lastName: 'Hutchinson', days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'BOD-1', position: 'Staff',                  firstName: 'Dean',  lastName: 'Chambers',   days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'BOD-2', position: 'Staff',                  firstName: 'Kelli', lastName: 'Knowles',    days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // ── REACH-1 — in service Tue–Fri 0800–1800 only ───────────────────────────
   // Scott Alt (FF/Paramedic) and Amanda Palmer (SRE) are the only people who
