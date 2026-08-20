@@ -73,7 +73,7 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   { apparatusId: 'EMS-COORD', position: 'EMS Coordinator', firstName: 'Darrin',  lastName: 'George',  days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'EMS-TRN',   position: 'EMS Trainer',     firstName: 'Katie',   lastName: 'Cardona', days: MON_THU, start: [7, 0], end: [17, 0] },
 
-  // ── REACH-1 — in service Tue–Fri 0700–1700 only ───────────────────────────
+  // ── REACH-1 — in service Tue–Fri 0800–1800 only ───────────────────────────
   // Scott Alt (FF/Paramedic) and Amanda Palmer (SRE) are the only people who
   // work REACH-1. Anyone else on it is a fill-in covering an absence, and a
   // fill-in comes from the PDF or is entered in the builder — see the
@@ -81,8 +81,8 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   //
   // Employee IDs were pinned here before this table existed; kept pinned
   // rather than re-resolved by name.
-  { apparatusId: 'REACH-1', position: 'FF_PM', firstName: 'Scott',  lastName: 'Alt',    employeeId: 2830, days: TUE_FRI, start: [7, 0], end: [17, 0] },
-  { apparatusId: 'REACH-1', position: 'SRE',   firstName: 'Amanda', lastName: 'Palmer', employeeId: 7356, days: TUE_FRI, start: [7, 0], end: [17, 0] },
+  { apparatusId: 'REACH-1', position: 'FF_PM', firstName: 'Scott',  lastName: 'Alt',    employeeId: 2830, days: TUE_FRI, start: [8, 0], end: [18, 0] },
+  { apparatusId: 'REACH-1', position: 'SRE',   firstName: 'Amanda', lastName: 'Palmer', employeeId: 7356, days: TUE_FRI, start: [8, 0], end: [18, 0] },
 ]
 
 // ── Lookups ───────────────────────────────────────────────────────────────────

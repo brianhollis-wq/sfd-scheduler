@@ -231,6 +231,16 @@ export function parseName(raw: string): { firstName: string; lastName: string } 
     .replace(/\d{3}[\-\s]?\d{3}[\-\s]?\d{4}/g, '')   // strip phone numbers
     .replace(/\b\d{2}:\d{2}\s*[-–]\s*\d{2}:\d{2}\b/g, '') // strip inline time ranges (07:00-17:00)
     .replace(/[*†‡#✓✗✘☑☒]+/g, '')                    // strip annotation marks (asterisks, etc.)
+    // Drop leftover numeric debris. A phone number split across a line wrap
+    // leaves a fragment like "503-932-" that the full-phone pattern above
+    // cannot match, and it was ending up inside the surname — "Robert Johnson
+    // 503-932-" never resolves against the employees table, so that member's
+    // shift was silently dropped. Names carry no digit-only tokens, so
+    // removing any token that has digits and no letters is safe; "3rd" and
+    // similar keep their letters and survive.
+    .split(/\s+/)
+    .filter((token) => !(/\d/.test(token) && !/[A-Za-z]/.test(token)))
+    .join(' ')
     .replace(/\s+/g, ' ')
     .trim()
 
@@ -541,7 +551,6 @@ export function parseScheduleText(text: string): ParseResult {
         ? 'light_duty'
         : (TYPE_MAP[typeCode] ?? 'regular')
       const isOt = OT_CODES.has(typeCode)
-      // Priority: light_duty fixed window > inline PDF range > default shift timestamps
       // Priority: light-duty fixed window > inline per-employee range >
       // the section's own printed range > the default 24-hour shift.
       const effectiveRange = inlineRange ?? currentSectionRange
