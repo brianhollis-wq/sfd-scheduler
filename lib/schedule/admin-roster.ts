@@ -89,14 +89,14 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   { apparatusId: 'TR-CPT1', position: 'Training Officer', callSign: 'TO2', firstName: 'Scott',   lastName: 'Miller',      employeeId: 1733, days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'TR-CPT2', position: 'Training Officer', callSign: 'TO3', firstName: 'Paul',    lastName: 'Bridgehouse', employeeId: 872, days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'TR-AO',   position: 'Training Officer', callSign: 'TO4', firstName: 'Matthew', lastName: 'Miller',      employeeId: 3580, days: TUE_FRI, start: [7, 0], end: [17, 0] },
-  // Peggy Lowry is a volunteer, so she has no employee ID — she and the
-  // contract Medical Director are the only two people in the personnel master
-  // without one. She is therefore the single post still resolved by name, and
-  // she will stay unmatched until an employees record exists for her, since
-  // daily_assignments identifies people only by that foreign key. The import
-  // screen reports her rather than committing a Training Division that is
-  // quietly one person short. See db/004.
-  { apparatusId: 'TR-SA',   position: 'Staff',       firstName: 'Peggy',   lastName: 'Lowry',       days: MON_FRI, start: [8, 0], end: [17, 0] },
+  // Peggy Lowry is a volunteer with no payroll ID. She is identified as
+  // VSA-C6, which is carried as her call sign and badge number — it cannot be
+  // her employees.id, because daily_assignments.employee_id is an integer
+  // foreign key into that column and will not hold a string. She therefore has
+  // a synthetic numeric key, 90001, created by db/004, which must be run before
+  // she will appear. Real payroll IDs run 554-7585, so the synthetic range
+  // cannot collide with a current or future hire.
+  { apparatusId: 'TR-SA',   position: 'Staff',       callSign: 'VSA-C6', firstName: 'Peggy',   lastName: 'Lowry',       employeeId: 90001, days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // ── EMS division ──────────────────────────────────────────────────────────
   { apparatusId: 'EMS-DC',    position: 'DC EMS',          callSign: 'C5', firstName: 'Steve', lastName: 'Boughey', employeeId: 7549, days: MON_FRI, start: [8, 0], end: [17, 0] },

@@ -119,11 +119,10 @@ SELECT 'missing_id' AS check, v.id
        ) AS v(id)
  WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.id = v.id);
 
--- 4. Peggy Lowry (Training Division) has no employee ID in the personnel
---    master, so she is the one roster post still matched by name. Expect one
---    row; none means she needs an employees record before she will appear.
-SELECT 'lowry' AS check, id, first_name, last_name, rank
+-- 4. Peggy Lowry is a volunteer with no payroll ID and is created by db/004
+--    with the synthetic key 90001. Expect one row once that has been run.
+SELECT 'lowry' AS check, id, first_name, last_name, rank, badge_number
   FROM employees
- WHERE first_name ILIKE 'Peggy' AND last_name ILIKE 'Lowry';
+ WHERE id = 90001 OR (first_name ILIKE 'Peggy' AND last_name ILIKE 'Lowry');
 
 -- The DC of Operations post is deliberately vacant and needs no employee.

@@ -15,10 +15,16 @@
 -- Only Lowry is handled here, because only she is rostered. Clothier needs the
 -- same treatment if he is ever added.
 --
--- The ID below is synthetic. Real IDs in the master run 554-7585, so 90001 sits
--- clear of that range and of any plausible future hire, which keeps a
--- non-payroll person from ever colliding with a real one. If you would rather
--- use a different scheme, change the number here and the employeeId in
+-- Lowry is identified as VSA-C6. That is stored as her badge number, and shown
+-- on the board as her call sign — it cannot be her employees.id, because
+-- daily_assignments.employee_id is an integer foreign key into that column and
+-- will not hold a string. Changing that would mean altering the key type of
+-- both tables and every row already in them, which is not worth doing for one
+-- volunteer.
+--
+-- So she also gets a synthetic numeric key, 90001. Real IDs in the master run
+-- 554-7585, so the synthetic range sits clear of any current or future hire. To
+-- use a different number, change it here and the employeeId in
 -- lib/schedule/admin-roster.ts together.
 -- ─────────────────────────────────────────────────────────────────────────────
 
@@ -50,17 +56,22 @@ SELECT 'civilian sample' AS check, id, first_name, last_name, rank
 -- Idempotent. rank is copied from an existing civilian rather than written as a
 -- literal; if the sample query above returned nothing, that subquery is null and
 -- this insert will fail rather than write a wrong value — set it explicitly.
-INSERT INTO employees (id, first_name, last_name, rank, is_paramedic)
+INSERT INTO employees (id, first_name, last_name, rank, badge_number, is_paramedic)
 SELECT 90001,
        'Peggy',
        'Lowry',
        (SELECT rank FROM employees
          WHERE rank::text ILIKE '%civilian%' OR rank::text ILIKE '%non%sworn%'
          LIMIT 1),
+       'VSA-C6',
        false
 ON CONFLICT (id) DO NOTHING;
 
 -- ── Step 3: verify ───────────────────────────────────────────────────────────
-SELECT 'lowry' AS check, id, first_name, last_name, rank
+SELECT 'lowry' AS check, id, first_name, last_name, rank, badge_number
   FROM employees
  WHERE first_name ILIKE 'Peggy' AND last_name ILIKE 'Lowry';
+
+-- If badge_number does not exist on your employees table, drop it from the
+-- INSERT above and re-run; the board will still show VSA-C6, which comes from
+-- the roster's call sign rather than from this row.
