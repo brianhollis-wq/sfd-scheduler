@@ -30,9 +30,68 @@ export const ADMIN_UNITS = new Set<string>([
   'EMS-DC', 'EMS-COORD', 'EMS-TRN',
   // Training division
   'TR-DC', 'TR-CPT1', 'TR-CPT2', 'TR-AO',
+  // Administration — fire chief and assistant chiefs
+  'C-1', 'C-2', 'C-3',
   // Light duty
   'LD',
 ])
+
+// ── Board layout below the battalions ────────────────────────────────────────
+
+/**
+ * A unit on temporary assignment, shown out of its normal place under the
+ * heading it is currently working.
+ *
+ * BR-5 lives at Station 5 as an in-service-unstaffed brush unit, like BR-1 and
+ * BR-7. When it is crewed for a conflagration it moves into the Specialty
+ * section under that heading, and it returns to Station 5 by itself as soon as
+ * the crew comes off — the board reads the assignment from whether the unit has
+ * anyone on it, so nothing has to be switched off by hand when the deployment
+ * ends.
+ */
+export const TEMPORARY_ASSIGNMENTS: Record<string, string> = {
+  'BR-5': 'CONFLAGRATION',
+}
+
+export function temporaryAssignmentLabel(apparatusId: string): string | null {
+  return TEMPORARY_ASSIGNMENTS[apparatusId] ?? null
+}
+
+/**
+ * Is this unit currently deployed on its temporary assignment?
+ *
+ * True only while it is actually crewed. An empty unit belongs back in its
+ * station list.
+ */
+export function isOnTemporaryAssignment(apparatusId: string, onDutyCrewCount: number): boolean {
+  return temporaryAssignmentLabel(apparatusId) != null && onDutyCrewCount > 0
+}
+
+export interface BoardSection {
+  title: string
+  /** Units in display order. Absent or empty ones are simply not rendered. */
+  unitIds: readonly string[]
+}
+
+/**
+ * Sections rendered beneath the battalions, in order.
+ *
+ * Nobody in any of them counts toward minimum staffing — that is enforced by
+ * MIN_STAFFING_UNITS above, which lists the active apparatus and nothing here.
+ */
+export const BOARD_SECTIONS: readonly BoardSection[] = [
+  // BR-5 appears here only while it is crewed for a conflagration.
+  { title: 'Specialty',               unitIds: ['LD', 'BR-5'] },
+  { title: 'Community Risk Reduction', unitIds: ['DFM-1', 'DFM-2', 'DFM-3', 'DFM-4', 'DFM-5', 'DFM-6', 'INSP-1', 'INSP-2'] },
+  { title: 'Training Division',        unitIds: ['TR-DC', 'TR-CPT1', 'TR-CPT2', 'TR-AO'] },
+  { title: 'EMS',                      unitIds: ['EMS-DC', 'EMS-COORD', 'EMS-TRN'] },
+  { title: 'Administration',           unitIds: ['C-1', 'C-2', 'C-3'] },
+]
+
+/** Every unit claimed by a named section. */
+export const SECTIONED_UNIT_IDS = new Set<string>(
+  BOARD_SECTIONS.flatMap((s) => [...s.unitIds]),
+)
 
 /** Is this an administration or specialty assignment rather than a line unit? */
 export function isAdminApparatus(apparatusId: string | null | undefined): boolean {

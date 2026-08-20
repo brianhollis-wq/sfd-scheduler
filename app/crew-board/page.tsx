@@ -13,6 +13,10 @@ import {
   ADMIN_UNITS,
   apparatusCountsTowardMinimum,
   missingMinStaffingUnits,
+  BOARD_SECTIONS,
+  SECTIONED_UNIT_IDS,
+  temporaryAssignmentLabel,
+  isOnTemporaryAssignment,
 } from '@/lib/schedule/apparatus'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -189,7 +193,12 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
   const onDutyCrew = app.crew.filter((a) => isOnDuty(a.assignment_type))
   const internCrew = app.crew.filter((a) => INTERN_TYPES.has(a.assignment_type))
   const crewCount = onDutyCrew.filter((a) => countsForStaffing(a.assignment_type)).length
-  const short = !app.isAdmin && !app.is_reserve && !app.computedUnstaffed && crewCount < app.min_staffing && app.status !== 'oos'
+  // A unit out on a temporary assignment is labelled with it and is not judged
+  // against its normal minimum — it is not running its usual role.
+  const deployedLabel = isOnTemporaryAssignment(app.id, onDutyCrew.length)
+    ? temporaryAssignmentLabel(app.id)
+    : null
+  const short = !app.isAdmin && !app.is_reserve && !app.computedUnstaffed && !deployedLabel && crewCount < app.min_staffing && app.status !== 'oos'
   const spotsNeeded = Math.max(0, app.min_staffing - crewCount)
 
   const borderColor = {
@@ -214,6 +223,11 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
         <div className="flex items-center gap-2">
           <StatusDot color={color} />
           <span className="font-mono font-bold text-white tracking-widest text-sm">{app.id}</span>
+          {deployedLabel && (
+            <span className="text-[9px] font-mono font-bold text-orange-300 bg-orange-900/30 border border-orange-700/40 rounded px-1.5 py-0.5 tracking-widest">
+              {deployedLabel}
+            </span>
+          )}
           {app.fleet_number && (
             <span className="text-zinc-400 font-mono text-xs">#{app.fleet_number}</span>
           )}
@@ -229,7 +243,7 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
       <div className="px-3 py-2 min-h-[52px]">
         {app.isAdmin && onDutyCrew.length === 0 ? (
           <div className="text-zinc-600 text-xs font-mono italic">ADMIN — 40 HR STAFF</div>
-        ) : app.computedUnstaffed ? (
+        ) : app.computedUnstaffed && onDutyCrew.length === 0 ? (
           <div className="text-sky-600/70 text-xs font-mono italic">IN SERVICE — UNSTAFFED</div>
         ) : app.is_reserve && onDutyCrew.length === 0 ? (
           <div className="text-zinc-600 text-xs font-mono italic">RESERVE — UNSTAFFED</div>
@@ -689,7 +703,13 @@ export default async function StaffingBoard({
     const bcApp = apps.find((a) => a.id === bat.bc)
     if (bcApp) accountedIds.add(bcApp.id)
     const stationGroups = bat.stations.map((sid) => {
-      const stationApps = apps.filter((a) => a.station_id === sid && a.id !== bat.bc)
+      const stationApps = apps.filter((a) =>
+        a.station_id === sid &&
+        a.id !== bat.bc &&
+        // A unit out on a temporary assignment shows under that heading below
+        // instead. It comes back here on its own once the crew comes off.
+        !isOnTemporaryAssignment(a.id, a.crew.filter((c) => isOnDuty(c.assignment_type)).length),
+      )
       stationApps.forEach((a) => accountedIds.add(a.id))
       const stationName = stationApps[0]?.stations?.name ?? `Station ${sid}`
       return { id: sid, name: stationName, apps: stationApps }
@@ -700,16 +720,35 @@ export default async function StaffingBoard({
   // Weekday check: admin 40-hr staff appear Mon–Fri even without crew data
   const isWeekday = new Date(shiftDate + 'T12:00:00').getDay() % 6 !== 0
 
-  const unclaimed = apps.filter((a) => {
-    if (!accountedIds.has(a.id)) {
-      if (a.isAdmin) {
-        const hasCrew = a.crew.filter((c) => isOnDuty(c.assignment_type)).length > 0
-        return hasCrew || isWeekday
-      }
-      return true
-    }
-    return false
-  })
+  const showsWithoutCrew = (a: AppWithCrew) => {
+    if (!a.isAdmin) return true
+    // Admin 40-hr units stand on the board Mon–Fri even before crew is entered.
+    const hasCrew = a.crew.filter((c) => isOnDuty(c.assignment_type)).length > 0
+    return hasCrew || isWeekday
+  }
+
+  const sectionData = BOARD_SECTIONS.map((section) => ({
+    title: section.title,
+    apps: section.unitIds
+      .map((id) => apps.find((a) => a.id === id))
+      .filter((a): a is AppWithCrew => a != null)
+      .filter((a) => {
+        // BR-5 sits in Specialty only while it is actually deployed; otherwise
+        // it belongs to Station 5 and was already claimed there.
+        if (temporaryAssignmentLabel(a.id) != null) {
+          return isOnTemporaryAssignment(a.id, a.crew.filter((c) => isOnDuty(c.assignment_type)).length)
+        }
+        return showsWithoutCrew(a)
+      }),
+  })).filter((s) => s.apps.length > 0)
+
+  sectionData.forEach((s) => s.apps.forEach((a) => accountedIds.add(a.id)))
+
+  // Anything belonging to no station and no named section. Keeping this catch-all
+  // means a new unit shows up somewhere rather than silently vanishing.
+  const unclaimed = apps.filter((a) =>
+    !accountedIds.has(a.id) && !SECTIONED_UNIT_IDS.has(a.id) && showsWithoutCrew(a),
+  )
 
   const now = new Date().toLocaleString('en-US', {
     timeZone: 'America/Los_Angeles',
@@ -847,10 +886,23 @@ export default async function StaffingBoard({
             />
           ))}
 
+          {sectionData.map((section) => (
+            <div key={section.title}>
+              <div className="text-[10px] font-mono font-bold tracking-[0.2em] text-zinc-500 uppercase mb-3">
+                {section.title}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {section.apps.map((app) => (
+                  <ApparatusCard key={app.id} app={app} />
+                ))}
+              </div>
+            </div>
+          ))}
+
           {unclaimed.length > 0 && (
             <div>
               <div className="text-[10px] font-mono font-bold tracking-[0.2em] text-zinc-500 uppercase mb-3">
-                Administrative / Specialty
+                Other
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {unclaimed.sort(apparatusSort).map((app) => (
