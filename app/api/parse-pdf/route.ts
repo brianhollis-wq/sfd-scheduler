@@ -49,7 +49,24 @@ async function extractPDFText(buffer: Buffer): Promise<string> {
   const pdfjsMod = require('pdfjs-dist/legacy/build/pdf.js')
   const pdfjs: PdfjsLib = pdfjsMod.default ?? pdfjsMod
 
-  pdfjs.GlobalWorkerOptions.workerSrc = '' // fake (in-process) worker for Node.js
+  // Hand pdf.js its worker directly instead of letting it find one.
+  //
+  // Under Node it runs the worker in-process, and PDFWorker resolves it in one
+  // of two ways: it uses globalThis.pdfjsWorker if that is set, and otherwise
+  // falls back to eval("require")("./pdf.worker.js") relative to pdf.js itself.
+  // That fallback is a dynamic require the bundler cannot see, so the worker
+  // was left out of the serverless deployment and the route died at run time
+  // with: Setting up fake worker failed: "Cannot find module './pdf.worker.js'".
+  //
+  // Requiring it here fixes both halves at once. The require is a literal in
+  // this file, so output tracing follows it and ships the file; and assigning
+  // the module to globalThis means pdf.js takes the worker it is given and
+  // never resolves a path at all.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfjsWorker = require('pdfjs-dist/legacy/build/pdf.worker.js')
+  ;(globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = pdfjsWorker
+
+  pdfjs.GlobalWorkerOptions.workerSrc = '' // in-process worker for Node.js
 
   const doc = await pdfjs
     .getDocument({
