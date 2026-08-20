@@ -1,70 +1,86 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- 004 — Employee records for people with no payroll employee ID
+-- 004 — Employee record for the volunteer post
 --
--- READ THIS BEFORE RUNNING. Unlike 001 and 003 it invents a key, so it is
--- worth a look rather than a straight paste.
+-- READ THIS BEFORE RUNNING. It is the only migration that creates a person, and
+-- the only one that chooses a key.
 --
--- daily_assignments identifies a person only by employee_id, a foreign key into
--- employees. Someone with no row there cannot be placed on the board at all —
--- there is nowhere to put a name. Two people in the personnel master have no
--- payroll ID:
+-- daily_assignments identifies a person solely by employee_id, a foreign key
+-- into employees. Someone with no row there cannot be placed on the board at
+-- all — there is nowhere to put a name. Two people in the personnel master have
+-- no payroll ID:
 --
 --   Peggy Lowry      volunteer, Training Division   — on the roster (TR-SA)
 --   Brian Clothier   contract Medical Director      — not on the roster
 --
--- Only Lowry is handled here, because only she is rostered. Clothier needs the
--- same treatment if he is ever added.
+-- Only Lowry is handled here, because only she is rostered.
 --
--- Lowry is identified as VSA-C6. That is stored as her badge number, and shown
--- on the board as her call sign — it cannot be her employees.id, because
--- daily_assignments.employee_id is an integer foreign key into that column and
--- will not hold a string. Changing that would mean altering the key type of
--- both tables and every row already in them, which is not worth doing for one
--- volunteer.
+-- She is identified as VSA-C6, stored as her badge number and shown on the
+-- board as her call sign. That cannot be her employees.id: the column is an
+-- integer and daily_assignments.employee_id is an integer foreign key into it.
+-- So she also gets the numeric key 9843 for the foreign key alone. Real payroll
+-- IDs currently run 554-7585, so 9843 is clear of all of them today, though it
+-- is not reserved — if payroll IDs climb that far the insert below would fail
+-- on a duplicate key rather than overwrite anyone.
 --
--- So she also gets a numeric key, 9843, for the foreign key alone. Real payroll
--- IDs in the master currently run 554-7585, so this is clear of every one of
--- them today. It is not reserved, though: if payroll IDs keep climbing they
--- would reach it eventually, and the insert below would then fail on a
--- duplicate key rather than overwrite anyone. To change it, edit it here and
--- the employeeId in lib/schedule/admin-roster.ts together.
+-- A previous version failed with "null value in column rank violates not-null
+-- constraint". It tried to copy a rank from an existing employee whose rank
+-- mentioned "civilian", and no such row exists: the personnel master's Rank
+-- column ("Civilian Non-Sworn") is a different vocabulary from employees.rank,
+-- which uses the app's own codes. Step 1 now shows what those codes actually
+-- are so the value below is chosen from real data rather than guessed.
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- ── Step 1: check the shape before inserting ─────────────────────────────────
--- Columns that have no default and cannot be null must all appear in the
--- INSERT below. If this lists any beyond the ones used, add them.
-SELECT 'required columns' AS check, column_name, data_type, column_default
+-- ── Step 1: what does this table actually require and allow? ─────────────────
+
+-- 1a. Columns with no default that cannot be null. Every one of these must
+--     appear in the INSERT. If this lists anything beyond id, first_name,
+--     last_name and rank, add it before running Step 2.
+SELECT 'required columns' AS check, column_name, data_type
   FROM information_schema.columns
  WHERE table_name = 'employees'
    AND is_nullable = 'NO'
    AND column_default IS NULL
  ORDER BY ordinal_position;
 
--- Confirm 9843 is free and see where the real IDs currently end.
+-- 1b. THE ONE THAT MATTERS — the rank values actually in use, most common
+--     first. Pick the one that fits a non-sworn staff member; it is very
+--     likely 'Staff'. If rank is an enum, this shows only values in use, so
+--     also run:  SELECT unnest(enum_range(NULL::<enum name>));
+SELECT 'rank values' AS check, rank::text AS value, count(*) AS people
+  FROM employees
+ GROUP BY rank
+ ORDER BY count(*) DESC;
+
+-- 1c. Confirm 9843 is free and see where the real IDs end.
 SELECT 'id range' AS check,
        min(id) AS lowest,
        max(id) AS highest,
        count(*) FILTER (WHERE id = 9843) AS id_9843_taken
   FROM employees;
 
--- An existing civilian to copy the rank value from, so this file does not have
--- to guess at an enum the way 003 originally did with apparatus status.
-SELECT 'civilian sample' AS check, id, first_name, last_name, rank
-  FROM employees
- WHERE rank::text ILIKE '%civilian%' OR rank::text ILIKE '%non%sworn%'
- LIMIT 3;
-
 -- ── Step 2: create the record ────────────────────────────────────────────────
--- Idempotent. rank is copied from an existing civilian rather than written as a
--- literal; if the sample query above returned nothing, that subquery is null and
--- this insert will fail rather than write a wrong value — set it explicitly.
+-- Idempotent.
+--
+-- rank is taken from an administrative civilian already on the roster — Cepeda,
+-- Cardenas, Chambers, Knowles, or one of the EMS support staff — because
+-- whatever value they carry is both valid for the column and right for a
+-- non-sworn staff member. If none of them are in employees the COALESCE falls
+-- back to 'Staff', which is the code the crew board already renders as STAFF.
+--
+-- If Step 1b showed something different, replace the whole rank expression with
+-- that literal.
 INSERT INTO employees (id, first_name, last_name, rank, badge_number, is_paramedic)
 SELECT 9843,
        'Peggy',
        'Lowry',
-       (SELECT rank FROM employees
-         WHERE rank::text ILIKE '%civilian%' OR rank::text ILIKE '%non%sworn%'
-         LIMIT 1),
+       COALESCE(
+         (SELECT rank
+            FROM employees
+           WHERE id IN (2459, 6400, 1948, 6399, 7335, 7338, 7455, 6993)
+             AND rank IS NOT NULL
+           LIMIT 1),
+         'Staff'
+       ),
        'VSA-C6',
        false
 ON CONFLICT (id) DO NOTHING;
@@ -72,8 +88,8 @@ ON CONFLICT (id) DO NOTHING;
 -- ── Step 3: verify ───────────────────────────────────────────────────────────
 SELECT 'lowry' AS check, id, first_name, last_name, rank, badge_number
   FROM employees
- WHERE first_name ILIKE 'Peggy' AND last_name ILIKE 'Lowry';
+ WHERE id = 9843;
 
--- If badge_number does not exist on your employees table, drop it from the
--- INSERT above and re-run; the board will still show VSA-C6, which comes from
--- the roster's call sign rather than from this row.
+-- If the INSERT fails on badge_number, that column does not exist here: drop it
+-- and its value from the INSERT and re-run. The board takes VSA-C6 from the
+-- roster's call sign, not from this row, so nothing is lost.
