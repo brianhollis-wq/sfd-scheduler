@@ -83,6 +83,11 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   { apparatusId: 'TR-CPT1', position: 'TO2',         firstName: 'Scott',   lastName: 'Miller',      employeeId: 1733, days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'TR-CPT2', position: 'TO3',         firstName: 'Paul',    lastName: 'Bridgehouse', employeeId: 872, days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'TR-AO',   position: 'TO4',         firstName: 'Matthew', lastName: 'Miller',      employeeId: 3580, days: TUE_FRI, start: [7, 0], end: [17, 0] },
+  // Peggy Lowry is one of only two people in the personnel master with no
+  // employee ID, so she is the one post still resolved by name. If she has no
+  // employees row either, the import screen reports her as unmatched rather
+  // than committing a Training Division that is quietly one person short.
+  { apparatusId: 'TR-SA',   position: 'Staff',       firstName: 'Peggy',   lastName: 'Lowry',       days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // ── EMS division ──────────────────────────────────────────────────────────
   { apparatusId: 'EMS-DC',    position: 'DC EMS',          firstName: 'Steve', lastName: 'Boughey', employeeId: 7549, days: MON_FRI, start: [8, 0], end: [17, 0] },

@@ -51,6 +51,8 @@ SELECT v.id,
           ('DFM-6',    'Deputy Fire Marshal 6'),
           ('INSP-1',   'Inspector I - 1'),
           ('INSP-2',   'Inspector I - 2'),
+          -- Training division
+          ('TR-SA',    'Training Division Staff'),
           -- EMS division
           ('EMS-PDA1', 'Paramedic Data Analyst 1'),
           ('EMS-PDA2', 'Paramedic Data Analyst 2'),
@@ -106,5 +108,12 @@ SELECT 'missing_id' AS check, v.id
           (2830),(7356)
        ) AS v(id)
  WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.id = v.id);
+
+-- 4. Peggy Lowry (Training Division) has no employee ID in the personnel
+--    master, so she is the one roster post still matched by name. Expect one
+--    row; none means she needs an employees record before she will appear.
+SELECT 'lowry' AS check, id, first_name, last_name, rank
+  FROM employees
+ WHERE first_name ILIKE 'Peggy' AND last_name ILIKE 'Lowry';
 
 -- The DC of Operations post is deliberately vacant and needs no employee.
