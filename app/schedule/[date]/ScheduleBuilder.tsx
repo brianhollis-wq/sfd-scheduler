@@ -13,6 +13,7 @@ import { useState, useCallback, useTransition } from 'react'
 import Link from 'next/link'
 import {
   ON_DUTY_TYPES,
+  INTERN_TYPES,
   countsForStaffing,
   LEAVE_TYPE_OPTIONS,
   ASSIGNABLE_TYPE_OPTIONS,
@@ -271,10 +272,15 @@ function ApparatusCard({
         ) : (
           <ul className="space-y-1">
             {positions.map(pos => {
-              const isLeave   = !ON_DUTY_TYPES.has(pos.assignmentType)
+              // A CCC student is present and accounted for, so they are not
+              // absent — but they are not on duty either, and the leave test is
+              // simply "not on duty", which struck them through as if they had
+              // called in. They get their own state.
+              const isIntern  = INTERN_TYPES.has(pos.assignmentType)
+              const isLeave   = !isIntern && !ON_DUTY_TYPES.has(pos.assignmentType)
               // light_duty is on duty and not 'regular', but it carries its own
               // LD badge below — don't also label it as overtime.
-              const isOT      = !isLeave && pos.assignmentType !== 'regular'
+              const isOT      = !isLeave && !isIntern && pos.assignmentType !== 'regular'
                                 && countsForStaffing(pos.assignmentType)
               const original  = app.positions.find(p => p.id === pos.rosterId)?.employee ?? null
 
@@ -286,7 +292,7 @@ function ApparatusCard({
                   </span>
 
                   {/* Name */}
-                  <span className={`flex-1 ${isLeave ? 'line-through text-neutral-600' : 'text-neutral-200'}`}>
+                  <span className={`flex-1 ${isLeave ? 'line-through text-neutral-600' : isIntern ? 'text-neutral-400' : 'text-neutral-200'}`}>
                     {pos.employee
                       ? `${pos.employee.last_name}, ${pos.employee.first_name.charAt(0)}.`
                       : <span className="text-amber-500/60 not-italic">▸ open vacancy</span>}
@@ -295,6 +301,11 @@ function ApparatusCard({
                   {/* PM badge */}
                   {pos.employee?.is_paramedic && !isLeave && (
                     <span className="text-blue-400 text-[9px] font-bold">PM</span>
+                  )}
+
+                  {/* Student — riding for accountability, fills no seat */}
+                  {isIntern && (
+                    <span className="text-purple-400/80 text-[9px] font-bold tracking-widest">CCC</span>
                   )}
 
                   {/* On duty but not filling a seat (light duty) */}
