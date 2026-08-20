@@ -13,9 +13,12 @@
 -- for the Office of the Fire Chief, Emergency Operations Division, Business
 -- Operations Division and Emergency Management.
 --
--- An earlier version of this file hardcoded status 'active' and failed with
--- "invalid input value for enum apparatus_status". It no longer guesses: the
--- new rows copy type and status from the existing DFM-1 row.
+-- An earlier version hardcoded status 'active' and failed with "invalid input
+-- value for enum apparatus_status"; the new rows now copy type and status from
+-- the existing DFM-1 row instead of guessing. A later version failed with
+-- "operator does not exist: integer = record" because the Logistics apparatus
+-- tuples had been pasted into the employee ID list further down. Both are
+-- fixed here.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ── Step 1: what does this database actually allow? ──────────────────────────
@@ -29,8 +32,13 @@ SELECT 'status enum' AS check, unnest(enum_range(NULL::apparatus_status))::text 
 SELECT 'existing' AS check, id, call_sign, display_name, type, status, min_staffing, is_reserve
   FROM apparatus
  WHERE id IN ('DFM-1','DFM-2','DFM-3','DFM-4','DFM-5','DFM-6',
-              'INSP-1','INSP-2','TR-DC','TR-CPT1','TR-CPT2','TR-AO',
-              'EMS-DC','EMS-COORD','EMS-TRN','REACH-1')
+              'INSP-1','INSP-2',
+              'TR-DC','TR-CPT1','TR-CPT2','TR-AO','TR-SA',
+              'EMS-DC','EMS-COORD','EMS-TRN','EMS-PDA1','EMS-PDA2','EMS-BILL','EMS-SA',
+              'LOG-ANL','LOG-FB','LOG-EB',
+              'C-1','C-2','C-3','C-4','DC-OPS','EM-1',
+              'FCO-1','FCO-2','BOD-1','BOD-2',
+              'REACH-1')
  ORDER BY id;
 
 -- ── Step 2: create the units that do not exist yet ───────────────────────────
@@ -80,49 +88,51 @@ ON CONFLICT (id) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Verification — read-only.
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Verification — read-only. Each query returns its own result set; the Supabase
+-- editor shows only the last one, so run them one at a time to read each.
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- 1. Re-run the "existing" query from Step 1 to confirm all 16 units are there.
+-- 1. Re-run the "existing" query in Step 1. Expect 34 rows once the insert has
+--    run — every unit the permanent roster writes to. A missing one means those
+--    assignments are silently skipped at import.
 
 -- 2. Confirm every pinned employee ID resolves. The roster no longer matches
---    people by name — each filled post carries an ID from the personnel master
---    list — so this is an exact check rather than a fuzzy one. Expect 33 rows.
---    A missing ID means that row will fail its foreign key at import.
+--    people by name; each filled post carries an ID from the personnel master.
+--    Expect 34 rows.
 SELECT 'employee' AS check, id, first_name, last_name, rank
   FROM employees
  WHERE id IN (
-     554, 3524, 6762, 6763, 3103, 5855,          -- deputy fire marshals FM1-FM6
-     7490, 7491,                                  -- inspectors
-     7536, 1733,  872, 3580,                      -- training division
-     7549, 2587, 7397, 7335, 7338, 7455, 6993,    -- EMS division
-     7184, 2459, 6400,                            -- Logistics division
-          ('LOG-ANL',  'Logistics Management Analyst'),
-          ('LOG-FB',   'Fire Buyer'),
-          ('LOG-EB',   'EMS Buyer'),
-          -- Office of the Fire Chief
-      919, 1120,                                  -- Emergency Operations Division
-     3375, 6936, 1948, 6399,                      -- Business Operations Division
-     5467, 7348, 7340,                            -- Logistics division
-     2830, 7356                                   -- REACH-1
-   )
+         554, 3524, 6762, 6763, 3103, 5855,   -- deputy fire marshals FM1-FM6
+        7490, 7491,                           -- inspectors
+        7536, 1733,  872, 3580, 9843,         -- training division (9843 = Lowry, db/004)
+        7549, 2587, 7397, 7335, 7338, 7455, 6993,  -- EMS division
+        5467, 7348, 7340,                     -- logistics division
+        7184, 2459, 6400,                     -- Office of the Fire Chief
+         919, 1120,                           -- Emergency Operations Division
+        3375, 6936, 1948, 6399,               -- Business Operations Division
+        2830, 7356                            -- REACH-1
+       )
  ORDER BY id;
 
--- 3. The reverse: which pinned IDs are absent? Expect no rows.
+-- 3. The reverse — which pinned IDs are absent? Expect no rows. A missing ID
+--    now fails its foreign key at import rather than being skipped quietly, so
+--    this is the one to read carefully.
+--    9843 will appear here until db/004 has been run; that is expected.
 SELECT 'missing_id' AS check, v.id
   FROM (VALUES
-          (554),(3524),(6762),(6763),(3103),(5855),(7490),(7491),
-          (7536),(1733),(872),(3580),
+          (554),(3524),(6762),(6763),(3103),(5855),
+          (7490),(7491),
+          (7536),(1733),(872),(3580),(9843),
           (7549),(2587),(7397),(7335),(7338),(7455),(6993),
-          (7184),(2459),(6400),(919),(1120),(3375),(6936),(1948),(6399),
           (5467),(7348),(7340),
+          (7184),(2459),(6400),
+          (919),(1120),
+          (3375),(6936),(1948),(6399),
           (2830),(7356)
        ) AS v(id)
  WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.id = v.id);
 
--- 4. Peggy Lowry is a volunteer with no payroll ID and is created by db/004
---    with the key 9843. Expect one row once that has been run.
-SELECT 'lowry' AS check, id, first_name, last_name, rank, badge_number
-  FROM employees
- WHERE id = 9843 OR (first_name ILIKE 'Peggy' AND last_name ILIKE 'Lowry');
-
--- The DC of Operations post is deliberately vacant and needs no employee.
+-- The DC of Operations post (DC-OPS) is deliberately vacant and needs no
+-- employee record.
