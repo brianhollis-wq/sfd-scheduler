@@ -244,7 +244,7 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
           <div className="text-sky-600/70 text-xs font-mono italic">IN SERVICE — UNSTAFFED</div>
         ) : app.is_reserve && onDutyCrew.length === 0 ? (
           <div className="text-zinc-600 text-xs font-mono italic">RESERVE — UNSTAFFED</div>
-        ) : app.status === 'oos' ? (
+        ) : app.status === 'oos' && onDutyCrew.length === 0 ? (
           <div className="text-red-500/70 text-xs font-mono italic">OUT OF SERVICE</div>
         ) : onDutyCrew.length === 0 ? (
           <div className="text-zinc-600 text-xs font-mono italic">NO CREW ASSIGNED</div>
@@ -642,9 +642,7 @@ export default async function StaffingBoard({
       shiftDate = latest.shift_date
       const { data: fallbackData } = await supabase
         .from(TABLES.dailyAssignments)
-        .select(
-          'apparatus_id, employee_id, assignment_type, start_dt, end_dt, employees(first_name, last_name, rank, badge_number, is_paramedic, shift_assignment)'
-        )
+        .select(CREW_BOARD_COLUMNS)
         .eq('shift_date', shiftDate)
       assignments = (fallbackData ?? []) as unknown as Assignment[]
     }

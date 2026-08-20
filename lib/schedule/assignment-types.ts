@@ -159,14 +159,18 @@ export const LEAVE_TYPE_OPTIONS = LEAVE_ASSIGNMENT_TYPES.map((value) => ({
   label: assignmentLabel(value),
 }))
 
-/** Options offered when assigning or swapping a member in the schedule builder. */
-export const ASSIGNABLE_TYPE_OPTIONS: Array<{ value: OnDutyAssignmentType; label: string }> = [
+/**
+ * Options offered when assigning or swapping a member in the schedule builder.
+ *
+ * ccc_intern is here so a student can be swapped for another — they trade days
+ * between themselves — and so one can be added to a unit directly. It is not an
+ * on-duty type and fills no seat; it is assignable, which is a different thing.
+ */
+export const ASSIGNABLE_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   'callback_voluntary',
   'callback_mandatory',
   'peak_engine',
   'trade',
   'regular',
-].map((value) => ({
-  value: value as OnDutyAssignmentType,
-  label: assignmentLabel(value),
-}))
+  'ccc_intern',
+].map((value) => ({ value, label: assignmentLabel(value) }))
