@@ -36,6 +36,7 @@ export const NICKNAME_MAP: Record<string, string[]> = {
   Pat:   ['Patrick'],
   Rick:  ['Richard'],
   Joe:   ['Joseph'],
+  Joey:  ['Joseph'],   // Joey Weigand → Joseph Weigand
   Steve: ['Steven', 'Stephen'],
   Tony:  ['Anthony'],
   Pete:  ['Peter'],
