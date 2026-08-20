@@ -55,38 +55,62 @@ export function lightDutyShiftWindow(shiftDate: string): ShiftWindow {
   }
 }
 
+/** A shift begins at 08:00 PDT and runs 24 hours. */
+const SHIFT_START_MINUTES = 8 * 60
+
 /**
  * Build a window from an explicit PDT local clock range, e.g. an inline
- * "17:00-20:30" on a PDF employee line. If the end clock time is at or before
- * the start clock time, the end lands on the next calendar day.
+ * "17:00-20:30" on a PDF employee line.
+ *
+ * A clock range names hours, not a day, and the shift straddles midnight, so
+ * the same printed range can mean either calendar day:
+ *
+ *   07:00-17:00   light duty, the morning of the shift date
+ *   06:00-08:00   the last two hours of the shift, the following morning
+ *
+ * Anchoring every range to the shift date put that second one entirely before
+ * the shift began — Weaver's three rows should tile his 24 hours (light duty
+ * 08:00-18:00, Engine 1 18:00-06:00, light duty 06:00-08:00) and the last one
+ * landed a day early, outside the shift altogether. A rule keyed on "before
+ * 08:00 means tomorrow" would then have thrown light duty's 07:00 start onto
+ * the wrong day instead.
+ *
+ * So the window is placed on whichever day puts more of it inside the shift,
+ * which is the question actually being asked. Ties keep the shift date. If the
+ * end clock time is at or before the start, the range wraps midnight and the
+ * end lands a day after the start, as before.
  */
 export function rangeShiftWindow(
   shiftDate: string,
   startHH: number, startMM: number,
   endHH: number,   endMM: number,
 ): ShiftWindow {
-  const startLocal = startHH * 60 + startMM
-  const endLocal   = endHH   * 60 + endMM
-  const endIsNextDay = endLocal <= startLocal
+  const startLocal   = startHH * 60 + startMM
+  const endLocal     = endHH   * 60 + endMM
+  const durationMins = (endLocal <= startLocal ? endLocal + 1440 : endLocal) - startLocal
+
+  // Minutes of this window that fall inside the shift, if it starts `offset`
+  // minutes after the shift date's midnight.
+  const overlap = (offset: number): number => {
+    const s = startLocal + offset
+    const e = s + durationMins
+    return Math.max(0, Math.min(e, SHIFT_START_MINUTES + 1440) - Math.max(s, SHIFT_START_MINUTES))
+  }
+  const dayOffset = overlap(1440) > overlap(0) ? 1440 : 0
 
   const [year, month, day] = shiftDate.split('-').map(Number)
   const baseMs = Date.UTC(year, month - 1, day)
 
-  // Start → UTC
-  const startUtc  = startLocal + PDT_OFFSET_MINUTES
-  const startDate = new Date(baseMs + Math.floor(startUtc / 1440) * 86400000).toISOString().slice(0, 10)
-  const startDt   = `${startDate}T${pad2(Math.floor((startUtc % 1440) / 60))}:${pad2(startUtc % 60)}:00+00:00`
-
-  // End → UTC
-  const endAdj  = endLocal + (endIsNextDay ? 1440 : 0)
-  const endUtc  = endAdj + PDT_OFFSET_MINUTES
-  const endDate = new Date(baseMs + Math.floor(endUtc / 1440) * 86400000).toISOString().slice(0, 10)
-  const endDt   = `${endDate}T${pad2(Math.floor((endUtc % 1440) / 60))}:${pad2(endUtc % 60)}:00+00:00`
+  const toUtcStamp = (localMins: number): string => {
+    const utc  = localMins + PDT_OFFSET_MINUTES
+    const date = new Date(baseMs + Math.floor(utc / 1440) * 86400000).toISOString().slice(0, 10)
+    return `${date}T${pad2(Math.floor((utc % 1440) / 60))}:${pad2(utc % 60)}:00+00:00`
+  }
 
   return {
-    startDt,
-    endDt,
-    hoursScheduled: Math.round(((endAdj - startLocal) / 60) * 10) / 10,
+    startDt:        toUtcStamp(startLocal + dayOffset),
+    endDt:          toUtcStamp(startLocal + dayOffset + durationMins),
+    hoursScheduled: Math.round((durationMins / 60) * 10) / 10,
   }
 }
 

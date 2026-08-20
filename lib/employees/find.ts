@@ -128,7 +128,26 @@ export async function findEmployee(
     }
   }
 
-  // 5. name_aliases table — catches edge cases like "Alex Beaudoin" → John Beaudoin,
+  // 5. Shortened surname: "David Olvera" → David Olvera-Godinez.
+  //    The mirror of rule 3. The schedule prints the first half of a
+  //    hyphenated surname while the personnel master carries it in full, so
+  //    neither an exact match nor hyphen normalization can reach the record.
+  //    Only a hyphen extension counts, which is what keeps Smith away from
+  //    Smithson, and the match must be unique — two people sharing a stem
+  //    would make the guess a coin toss, and putting the wrong person on an
+  //    apparatus is worse than reporting the row unmatched.
+  if (!lastName.includes('-')) {
+    const stem = lastName.replace(/[%_]/g, '')
+    const { data: extensions } = await supabase
+      .from(TABLES.employees)
+      .select('id, first_name, last_name')
+      .ilike('first_name', firstName)
+      .ilike('last_name', `${stem}-%`)
+      .limit(2)
+    if (extensions?.length === 1) return extensions[0] as EmployeeRow
+  }
+
+  // 6. name_aliases table — catches edge cases like "Alex Beaudoin" → John Beaudoin,
   //    "David Olvera" → David Olvera-Godinez, CCC interns, etc.
   //    Schema: name_aliases(alias text PK, employee_id int FK employees.id)
   const alias = `${firstName} ${lastName}`.trim()
