@@ -20,6 +20,7 @@ import {
 } from '@/lib/schedule/assignment-types'
 import { apparatusCountsTowardMinimum } from '@/lib/schedule/apparatus'
 import { rankLabel } from '@/lib/employees/rank'
+import { assessStaffing } from '@/lib/schedule/staffing'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -223,11 +224,16 @@ function ApparatusCard({
   const [leaveKey, setLeaveKey] = useState<string | null>(null)
   const [swapKey, setSwapKey]   = useState<string | null>(null)
 
-  // Light-duty members stay listed but do not fill a seat — see
-  // countsForStaffing in lib/schedule/assignment-types.ts.
-  const onDutyCount = positions.filter(p => countsForStaffing(p.assignmentType) && p.employee).length
-  const isShort = apparatusCountsTowardMinimum(app.apparatus_id)
-                  && onDutyCount < app.min_staffing
+  // Judged by seat, matching the crew board: an engine needs a captain, an
+  // operator and a firefighter; a medic a paramedic and an EMT. Light-duty
+  // members and interns stay listed but fill nothing — see countsForStaffing.
+  const staffing = assessStaffing(
+    app.type,
+    positions.map(p => ({ rank: p.employee?.rank, assignmentType: p.employee ? p.assignmentType : 'vacant' })),
+    app.min_staffing,
+  )
+  const onDutyCount = staffing.staffingCount
+  const isShort = apparatusCountsTowardMinimum(app.apparatus_id) && staffing.isShort
 
   const color: 'green' | 'amber' = isShort ? 'amber' : 'green'
 
@@ -243,6 +249,11 @@ function ApparatusCard({
           <span className="font-mono font-bold text-white tracking-widest text-sm">{app.apparatus_id}</span>
         </div>
         <div className="flex items-center gap-2">
+          {isShort && staffing.openSeats.length > 0 && (
+            <span className="text-[9px] font-mono font-bold text-amber-400/80 tracking-widest">
+              {staffing.openSeats.join(' ')}
+            </span>
+          )}
           <span className={`text-xs font-mono font-bold tabular-nums ${isShort ? 'text-amber-400' : 'text-green-400'}`}>
             {onDutyCount}/{app.min_staffing}
           </span>
@@ -359,8 +370,13 @@ function StationSection({ stationId, stationName, apps, posMap, onUpdate, onAddO
   const label = stationName.replace(/^Station \d+\s*[-–]?\s*/i, '').trim() || stationName
   const shortCount = apps.filter(a => {
     if (!apparatusCountsTowardMinimum(a.apparatus_id)) return false
-    const cnt = (posMap.get(a.apparatus_id) ?? []).filter(p => countsForStaffing(p.assignmentType) && p.employee).length
-    return cnt < a.min_staffing
+    return assessStaffing(
+      a.type,
+      (posMap.get(a.apparatus_id) ?? []).map(p => ({
+        rank: p.employee?.rank, assignmentType: p.employee ? p.assignmentType : 'vacant',
+      })),
+      a.min_staffing,
+    ).isShort
   }).length
 
   return (
@@ -408,8 +424,13 @@ function BattalionSection({ battalion, apparatuses, posMap, onUpdate, onAddOT }:
     battalion.stations.includes(a.station_id ?? -1) && a.type === 'engine')
   const shortCount = [...(bcApp ? [bcApp] : []), ...stationGroups.flatMap(s => s.apps)].filter(a => {
     if (!apparatusCountsTowardMinimum(a.apparatus_id)) return false
-    const cnt = (posMap.get(a.apparatus_id) ?? []).filter(p => countsForStaffing(p.assignmentType) && p.employee).length
-    return cnt < a.min_staffing
+    return assessStaffing(
+      a.type,
+      (posMap.get(a.apparatus_id) ?? []).map(p => ({
+        rank: p.employee?.rank, assignmentType: p.employee ? p.assignmentType : 'vacant',
+      })),
+      a.min_staffing,
+    ).isShort
   }).length
 
   const isNorth  = battalion.name.includes('North')
@@ -584,9 +605,13 @@ export default function ScheduleBuilder({
   // Staffing status across all apparatus
   const shortUnits = apparatuses.filter(app => {
     if (!apparatusCountsTowardMinimum(app.apparatus_id)) return false
-    const cnt = (posMap.get(app.apparatus_id) ?? [])
-      .filter(p => countsForStaffing(p.assignmentType) && p.employee).length
-    return cnt < app.min_staffing
+    return assessStaffing(
+      app.type,
+      (posMap.get(app.apparatus_id) ?? []).map(p => ({
+        rank: p.employee?.rank, assignmentType: p.employee ? p.assignmentType : 'vacant',
+      })),
+      app.min_staffing,
+    ).isShort
   })
   const staffingMet = shortUnits.length === 0
 

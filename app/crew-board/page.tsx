@@ -11,6 +11,7 @@ import {
 import { CREW_BOARD_COLUMNS } from '@/lib/schedule/daily-assignment'
 import { rankLabel, rankSortValue } from '@/lib/employees/rank'
 import { callSignForApparatus } from '@/lib/schedule/admin-roster'
+import { assessStaffing } from '@/lib/schedule/staffing'
 import {
   ADMIN_UNITS,
   apparatusCountsTowardMinimum,
@@ -144,9 +145,14 @@ function getStatusColor(app: AppWithCrew): 'green' | 'amber' | 'red' | 'gray' | 
   if (app.computedUnstaffed) return 'blue'
   if (app.is_reserve) return 'gray'
   if (app.status === 'oos') return 'red'
-  const crewCount = app.crew.filter((a) => countsForStaffing(a.assignment_type)).length
-  if (crewCount < app.min_staffing) return 'amber'
-  return 'green'
+  // Same seat-based assessment the card uses, so the dot cannot read green
+  // over an unfilled captain's seat.
+  const staffing = assessStaffing(
+    app.type,
+    app.crew.map((a) => ({ rank: a.employees?.rank, assignmentType: a.assignment_type })),
+    app.min_staffing,
+  )
+  return staffing.isShort ? 'amber' : 'green'
 }
 
 // ── Status dot ─────────────────────────────────────────────────────────────────
@@ -170,14 +176,25 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
   // not fill a seat, so the roster and the count use different predicates.
   const onDutyCrew = app.crew.filter((a) => isOnDuty(a.assignment_type))
   const internCrew = app.crew.filter((a) => INTERN_TYPES.has(a.assignment_type))
-  const crewCount = onDutyCrew.filter((a) => countsForStaffing(a.assignment_type)).length
+  // Staffing is judged by seat, not headcount: an engine needs a captain, an
+  // operator and a firefighter, a medic needs a paramedic and an EMT. Three
+  // firefighters on an engine is three people and still no officer.
+  const staffing = assessStaffing(
+    app.type,
+    app.crew.map((a) => ({ rank: a.employees?.rank, assignmentType: a.assignment_type })),
+    app.min_staffing,
+  )
+  const crewCount = staffing.staffingCount
   // A unit out on a temporary assignment is labelled with it and is not judged
   // against its normal minimum — it is not running its usual role.
   const deployedLabel = isOnTemporaryAssignment(app.id, onDutyCrew.length)
     ? temporaryAssignmentLabel(app.id)
     : null
-  const short = !app.isAdmin && !app.is_reserve && !app.computedUnstaffed && !deployedLabel && crewCount < app.min_staffing && app.status !== 'oos'
-  const spotsNeeded = Math.max(0, app.min_staffing - crewCount)
+  const short = !app.isAdmin && !app.is_reserve && !app.computedUnstaffed && !deployedLabel && staffing.isShort && app.status !== 'oos'
+  // Seats nobody aboard can fill, then any further shortfall against the plain
+  // minimum for units with no defined composition.
+  const openSeatLabels = staffing.openSeats
+  const extraSpots = Math.max(0, app.min_staffing - crewCount - openSeatLabels.length)
 
   const borderColor = {
     green: 'border-green-600/40',
@@ -268,8 +285,14 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
 
         {short && !app.computedUnstaffed && (
           <ul className="space-y-1 mt-1">
-            {Array.from({ length: spotsNeeded }).map((_, i) => (
-              <li key={i} className="text-xs font-mono text-amber-500/70 flex items-center gap-1">
+            {openSeatLabels.map((label) => (
+              <li key={label} className="text-xs font-mono text-amber-500/70 flex items-center gap-1">
+                <span className="w-14 shrink-0">{label}</span>
+                <span className="text-amber-600/50">▸ unfilled</span>
+              </li>
+            ))}
+            {Array.from({ length: extraSpots }).map((_, i) => (
+              <li key={`extra-${i}`} className="text-xs font-mono text-amber-500/70 flex items-center gap-1">
                 <span className="w-14 shrink-0">OPEN</span>
                 <span className="text-amber-600/50">▸ vacancy</span>
               </li>
@@ -309,8 +332,11 @@ function StationSection({ stationId, stationName, apps }: {
 }) {
   const shortCount = apps.filter((a) => {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
-    const crew = a.crew.filter((c) => countsForStaffing(c.assignment_type)).length
-    return crew < a.min_staffing
+    return assessStaffing(
+      a.type,
+      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type })),
+      a.min_staffing,
+    ).isShort
   }).length
 
   return (
@@ -343,8 +369,11 @@ function BattalionSection({ name, bcApp, stationGroups }: {
   const engines = allApps.filter((a) => a.type === 'engine' && a.status !== 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
   const shortUnits = allApps.filter((a) => {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
-    const crew = a.crew.filter((c) => countsForStaffing(c.assignment_type)).length
-    return crew < a.min_staffing
+    return assessStaffing(
+      a.type,
+      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type })),
+      a.min_staffing,
+    ).isShort
   })
 
   const isNorth = name.toLowerCase().includes('north')
@@ -678,8 +707,11 @@ export default async function StaffingBoard({
 
   const activeApps = apps.filter((a) => a.status !== 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
   const shortUnits = activeApps.filter((a) => {
-    const crew = a.crew.filter((c) => countsForStaffing(c.assignment_type)).length
-    return crew < a.min_staffing
+    return assessStaffing(
+      a.type,
+      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type })),
+      a.min_staffing,
+    ).isShort
   })
   const oosUnits = apps.filter((a) => a.status === 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
 
