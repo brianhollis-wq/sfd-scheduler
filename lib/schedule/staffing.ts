@@ -116,6 +116,31 @@ export interface CrewMemberForStaffing {
  * which is what a row written before start_dt and end_dt were populated looks
  * like — better to count them than to empty a unit on missing data.
  */
+/**
+ * The span of a unit's assigned crew, or null when it cannot be worked out.
+ *
+ * A unit with nobody on it has no window, so it keeps being judged against its
+ * minimum and still reads short — an empty unit is a staffing problem, not a
+ * unit that has finished for the day.
+ */
+function unitServiceWindow(
+  crew: readonly CrewMemberForStaffing[],
+): { start: number; end: number } | null {
+  let start = Number.POSITIVE_INFINITY
+  let end = Number.NEGATIVE_INFINITY
+
+  for (const member of crew) {
+    if (!member.startDt || !member.endDt) return null   // unknown hours — assume all shift
+    const s = Date.parse(member.startDt)
+    const e = Date.parse(member.endDt)
+    if (Number.isNaN(s) || Number.isNaN(e)) return null
+    if (s < start) start = s
+    if (e > end) end = e
+  }
+
+  return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null
+}
+
 function isAboardAt(member: CrewMemberForStaffing, at: number): boolean {
   if (!member.startDt || !member.endDt) return true
   const start = Date.parse(member.startDt)
@@ -125,6 +150,13 @@ function isAboardAt(member: CrewMemberForStaffing, at: number): boolean {
 }
 
 export interface StaffingAssessment {
+  /**
+   * The unit is not running at the instant asked about — a peak medic outside
+   * its hours, rather than a unit short of people.
+   */
+  outOfService: boolean
+  /** The hours the unit runs, as epoch ms, when they can be determined. */
+  serviceWindow: { start: number; end: number } | null
   /** Bodies that count toward staffing — excludes leave, light duty, interns. */
   staffingCount: number
   /** Seats this unit requires, empty when it has no defined composition. */
@@ -157,6 +189,28 @@ export function assessStaffing(
   minStaffing: number,
   at?: number | null,
 ): StaffingAssessment {
+  // The hours the unit runs, taken from the crew assigned to it. The daily PDF
+  // prints a time range against every block — 08:00-18:00 for the peak medics,
+  // 08:00-08:00 for a full-shift unit — and the parser gives each member that
+  // range unless their own line overrides it, so the span of the crew's windows
+  // is the unit's own.
+  const staffingCrew = crew.filter((c) => countsForStaffing(c.assignmentType))
+  const serviceWindow = unitServiceWindow(staffingCrew)
+
+  // Outside its hours a unit is not short, it is simply not running. Judging a
+  // peak medic against its minimum at nine in the evening reported two open
+  // seats on a unit that had gone off at six.
+  if (at != null && serviceWindow != null && (at < serviceWindow.start || at >= serviceWindow.end)) {
+    return {
+      staffingCount: 0,
+      requiredSeats: seatsForType(apparatusType) ?? [],
+      openSeats: [],
+      isShort: false,
+      outOfService: true,
+      serviceWindow,
+    }
+  }
+
   const present = at == null ? crew : crew.filter((c) => isAboardAt(c, at))
   const counting = present.filter((c) => countsForStaffing(c.assignmentType))
   const staffingCount = counting.length
@@ -168,6 +222,8 @@ export function assessStaffing(
       requiredSeats: [],
       openSeats: [],
       isShort: staffingCount < minStaffing,
+      outOfService: false,
+      serviceWindow,
     }
   }
 
@@ -208,5 +264,7 @@ export function assessStaffing(
     requiredSeats: seats,
     openSeats,
     isShort: openSeats.length > 0 || staffingCount < minStaffing,
+    outOfService: false,
+    serviceWindow,
   }
 }

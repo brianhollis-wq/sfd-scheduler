@@ -31,6 +31,8 @@ export interface PreviewRow extends ParsedRow {
 export interface CommitResult {
   inserted: number
   skipped:  number
+  /** PDF rows dropped because the name did not resolve to an employee. */
+  unmatchedPdf?: string[]
   /** Permanent-roster people who could not be matched in the employees table. */
   unmatchedRoster?: string[]
   /** Permanent-roster apparatus missing from the apparatus table. */
@@ -174,6 +176,12 @@ export async function commitScheduleAction(
     const matched = rows.filter((r) => r.matched && r.employeeId !== null)
     const toInsert = matched.filter((r) => validApparatus.has(r.apparatusId))
     const skipped  = rows.length - toInsert.length
+    // Name who was dropped, not just how many. A count alone is easy to read
+    // past, and a dropped row is a person missing off the board: Engine 5 read
+    // 2/3 for a week because "Wes Westerman" did not resolve to Jack Westerman.
+    const unmatchedPdf = rows
+      .filter((r) => !r.matched || r.employeeId === null)
+      .map((r) => `${r.firstName} ${r.lastName} (${r.apparatusId})`)
 
     let insertedCount = 0
 
@@ -226,6 +234,7 @@ export async function commitScheduleAction(
     return {
       inserted: insertedCount,
       skipped,
+      ...(unmatchedPdf.length     > 0 ? { unmatchedPdf }                       : {}),
       ...(unmatched.length        > 0 ? { unmatchedRoster:  unmatched }        : {}),
       ...(skippedApparatus.length > 0 ? { missingApparatus: skippedApparatus } : {}),
     }
