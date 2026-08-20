@@ -574,8 +574,8 @@ export default function ScheduleBuilder({
   // Computed stats
   const allPositions     = [...posMap.values()].flat()
   // Must match the crew board's "On Duty" tile exactly: seat-filling assignment
-  // types, on an active apparatus, counted by distinct employee so a member
-  // cross-staffed on an engine and its medic is one body, not two.
+  // types, on an active apparatus, counted by distinct employee so one body
+  // never counts twice.
   const onDutyCount      = new Set(
     allPositions
       .filter(p =>

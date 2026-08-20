@@ -12,8 +12,11 @@ import { TABLES } from '@/lib/db/tables'
 import {
   buildDailyAssignmentRow,
   withGeneratedSortOrder,
+  SORT_ORDER_STEP,
+  type DailyAssignmentRow,
 } from '@/lib/schedule/daily-assignment'
-import { standardShiftWindow } from '@/lib/schedule/shift-window'
+import { permanentRosterForDate, windowForEntry } from '@/lib/schedule/admin-roster'
+import { findEmployee, type AdminClient } from '@/lib/employees/find'
 
 // ────────────────────────────────────────────────────────────────
 // Types shared with the client
@@ -28,28 +31,71 @@ export interface PreviewRow extends ParsedRow {
 export interface CommitResult {
   inserted: number
   skipped:  number
+  /** Permanent-roster people who could not be matched in the employees table. */
+  unmatchedRoster?: string[]
+  /** Permanent-roster apparatus missing from the apparatus table. */
+  missingApparatus?: string[]
   error?:   string
 }
 
 // ────────────────────────────────────────────────────────────────
-// REACH-1 permanent crew (always Tue–Fri, never in the PDF)
+// Permanent roster expansion
 // ────────────────────────────────────────────────────────────────
 
-const REACH1_APPARATUS_ID = 'REACH-1'
+/**
+ * Build daily_assignments rows for everyone whose assignment never appears in
+ * the PDF — administration, specialty and REACH-1 crew. See
+ * lib/schedule/admin-roster.ts.
+ *
+ * Entries whose apparatus is absent from the apparatus table are skipped, and
+ * entries whose person cannot be matched in the employees table are reported
+ * so they surface in the import result rather than vanishing.
+ */
+async function buildPermanentRosterRows(
+  supabase: AdminClient,
+  shiftDate: string,
+  validApparatus: Set<string>,
+): Promise<{ rows: DailyAssignmentRow[]; unmatched: string[]; skippedApparatus: string[] }> {
+  const entries = permanentRosterForDate(shiftDate)
 
-const REACH1_PERMANENT_CREW: Array<{
-  employee_id:     number
-  assignment_type: string
-}> = [
-  { employee_id: 2830, assignment_type: 'regular' }, // Scott Alt
-  { employee_id: 7356, assignment_type: 'regular' }, // Amanda Palmer
-]
+  const rows: DailyAssignmentRow[] = []
+  const unmatched: string[] = []
+  const skippedApparatus: string[] = []
+  const sortOrderByApparatus = new Map<string, number>()
 
-/** Returns true if a YYYY-MM-DD date string falls on Tuesday–Friday UTC. */
-function isTueToFri(dateStr: string): boolean {
-  // Parse at noon UTC to avoid any DST / timezone shifts near midnight
-  const day = new Date(dateStr + 'T12:00:00Z').getUTCDay() // 0=Sun … 6=Sat
-  return day >= 2 && day <= 5
+  for (const entry of entries) {
+    if (!validApparatus.has(entry.apparatusId)) {
+      if (!skippedApparatus.includes(entry.apparatusId)) skippedApparatus.push(entry.apparatusId)
+      continue
+    }
+
+    let employeeId = entry.employeeId ?? null
+    if (employeeId == null) {
+      const emp = await findEmployee(supabase, entry.firstName, entry.lastName)
+      if (!emp) {
+        unmatched.push(`${entry.firstName} ${entry.lastName} (${entry.apparatusId})`)
+        continue
+      }
+      employeeId = emp.id
+    }
+
+    const sortOrder = sortOrderByApparatus.get(entry.apparatusId) ?? 0
+    sortOrderByApparatus.set(entry.apparatusId, sortOrder + SORT_ORDER_STEP)
+
+    rows.push(buildDailyAssignmentRow({
+      shiftDate,
+      apparatusId:    entry.apparatusId,
+      employeeId,
+      position:       entry.position,
+      assignmentType: 'regular',
+      sortOrder,
+      window:         windowForEntry(entry, shiftDate),
+      isOt:           false,
+      publishedBy:    'permanent-roster',
+    }))
+  }
+
+  return { rows, unmatched, skippedApparatus }
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -81,8 +127,6 @@ export async function commitScheduleAction(
     const toInsert = matched.filter((r) => validApparatus.has(r.apparatusId))
     const skipped  = rows.length - toInsert.length
 
-    if (toInsert.length === 0 && !isTueToFri(shiftDate)) return { inserted: 0, skipped }
-
     let insertedCount = 0
 
     if (toInsert.length > 0) {
@@ -112,28 +156,25 @@ export async function commitScheduleAction(
       insertedCount = toInsert.length
     }
 
-    // Auto-populate REACH-1 on Tue–Fri with permanent crew (Scott Alt & Amanda Palmer).
-    // These employees never appear in the daily PDF, so we always upsert them here.
-    if (isTueToFri(shiftDate) && validApparatus.has(REACH1_APPARATUS_ID)) {
-      const reach1Rows = REACH1_PERMANENT_CREW.map((c, i) => buildDailyAssignmentRow({
-        shiftDate,
-        apparatusId:    REACH1_APPARATUS_ID,
-        employeeId:     c.employee_id,
-        assignmentType: c.assignment_type,
-        sortOrder:      i * 10,
-        window:         standardShiftWindow(shiftDate),
-        publishedBy:    'pdf-import',
-      }))
+    // Administration, specialty and REACH-1 staff are never in the PDF.
+    const { rows: rosterRows, unmatched, skippedApparatus } =
+      await buildPermanentRosterRows(supabase, shiftDate, validApparatus)
 
-      const { error: r1Err } = await supabase
+    if (rosterRows.length > 0) {
+      const { error: rosterErr } = await supabase
         .from(TABLES.dailyAssignments)
-        .insert(reach1Rows)
-      if (r1Err) throw r1Err
+        .insert(rosterRows)
+      if (rosterErr) throw rosterErr
 
-      insertedCount += reach1Rows.length
+      insertedCount += rosterRows.length
     }
 
-    return { inserted: insertedCount, skipped }
+    return {
+      inserted: insertedCount,
+      skipped,
+      ...(unmatched.length        > 0 ? { unmatchedRoster:  unmatched }        : {}),
+      ...(skippedApparatus.length > 0 ? { missingApparatus: skippedApparatus } : {}),
+    }
   } catch (err: unknown) {
     // Supabase errors are plain objects with a `message` field, not Error instances
     let msg: string

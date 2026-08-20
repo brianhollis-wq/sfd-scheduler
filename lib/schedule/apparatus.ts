@@ -22,9 +22,15 @@
  *   LD      light duty
  */
 export const ADMIN_UNITS = new Set<string>([
-  'DFM-1', 'DFM-2', 'DFM-3', 'DFM-4', 'DFM-5',
+  // Community Risk Reduction — six deputy fire marshals (FM1–FM6)
+  'DFM-1', 'DFM-2', 'DFM-3', 'DFM-4', 'DFM-5', 'DFM-6',
+  // Fire prevention inspectors
+  'INSP-1', 'INSP-2',
+  // EMS division
   'EMS-DC', 'EMS-COORD', 'EMS-TRN',
+  // Training division
   'TR-DC', 'TR-CPT1', 'TR-CPT2', 'TR-AO',
+  // Light duty
   'LD',
 ])
 

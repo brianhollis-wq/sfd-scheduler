@@ -659,9 +659,11 @@ export default async function StaffingBoard({
   // MIN_STAFFING_UNITS), and only assignment types that fill a seat. Reserve,
   // brush, harbor, administration and specialty assignments are all excluded,
   // whether or not they are staffed.
-  // Counted by distinct employee, not by row. A member cross-staffed on both
-  // an engine and its medic holds two daily_assignments rows but is one body
-  // on the floor, and minimum staffing is a headcount of people.
+  // Counted by distinct employee, not by row. Every unit carries its own crew
+  // — there is no either/or cross-staffing — so today this equals the row
+  // count. It stays a distinct count because minimum staffing is a headcount
+  // of people, and one body must never count twice if anyone is ever written
+  // to two units on the same day.
   const onDutyTotal = new Set(
     assignments
       .filter((a) =>

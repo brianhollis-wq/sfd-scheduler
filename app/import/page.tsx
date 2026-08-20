@@ -163,7 +163,8 @@ type PageState =
   | { phase: 'parsing' }
   | { phase: 'preview'; shiftDate: string; rows: PreviewRow[]; warnings: ParseWarning[]; debugLines?: string[] }
   | { phase: 'committing' }
-  | { phase: 'done'; inserted: number; skipped: number; shiftDate: string }
+  | { phase: 'done'; inserted: number; skipped: number; shiftDate: string;
+      unmatchedRoster?: string[]; missingApparatus?: string[] }
   | { phase: 'error'; message: string }
 
 export default function ImportPage() {
@@ -231,7 +232,14 @@ export default function ImportPage() {
       if (result.error) {
         setState({ phase: 'error', message: result.error })
       } else {
-        setState({ phase: 'done', inserted: result.inserted, skipped: result.skipped, shiftDate })
+        setState({
+          phase: 'done',
+          inserted: result.inserted,
+          skipped: result.skipped,
+          shiftDate,
+          unmatchedRoster: result.unmatchedRoster,
+          missingApparatus: result.missingApparatus,
+        })
       }
     })
   }
@@ -410,6 +418,37 @@ export default function ImportPage() {
                 </span>
               )}
             </p>
+            {/* Permanent-roster problems. These people and units are never in
+                the PDF, so nothing else would reveal that they went missing. */}
+            {(state.unmatchedRoster?.length || state.missingApparatus?.length) ? (
+              <div className="mx-auto max-w-md text-left rounded-lg border border-amber-700/40 bg-amber-950/30 px-4 py-3 space-y-2">
+                {state.unmatchedRoster?.length ? (
+                  <div>
+                    <p className="text-amber-300 text-xs font-semibold uppercase tracking-wider">
+                      Not found in employees
+                    </p>
+                    <ul className="text-amber-200/80 text-xs mt-1 space-y-0.5">
+                      {state.unmatchedRoster.map(n => <li key={n}>· {n}</li>)}
+                    </ul>
+                  </div>
+                ) : null}
+                {state.missingApparatus?.length ? (
+                  <div>
+                    <p className="text-amber-300 text-xs font-semibold uppercase tracking-wider">
+                      Apparatus not in database
+                    </p>
+                    <p className="text-amber-200/80 text-xs mt-1">
+                      {state.missingApparatus.join(', ')}
+                    </p>
+                  </div>
+                ) : null}
+                <p className="text-amber-200/50 text-[11px] pt-1 border-t border-amber-800/30">
+                  These are permanent-roster assignments — they are not in the PDF and were
+                  not committed. Everything else imported normally.
+                </p>
+              </div>
+            ) : null}
+
             <div className="flex justify-center gap-3 pt-2">
               <a
                 href="/"
