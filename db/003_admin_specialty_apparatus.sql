@@ -78,48 +78,33 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 1. Re-run the "existing" query from Step 1 to confirm all 16 units are there.
 
--- 2. THE IMPORTANT ONE — do these people exist in the employees table?
---    The roster resolves them by name (with nickname and alias fallbacks).
---    Anyone absent here will be reported as unmatched on the import screen and
---    will not be committed. Expect 30 rows.
+-- 2. Confirm every pinned employee ID resolves. The roster no longer matches
+--    people by name — each filled post carries an ID from the personnel master
+--    list — so this is an exact check rather than a fuzzy one. Expect 30 rows.
+--    A missing ID means that row will fail its foreign key at import.
 SELECT 'employee' AS check, id, first_name, last_name, rank
   FROM employees
- WHERE (first_name ILIKE 'Sean'    AND last_name ILIKE 'Mansfield')
-    OR (first_name ILIKE 'Sara'    AND last_name ILIKE 'Roth')
-    OR (first_name ILIKE 'Justin'  AND last_name ILIKE 'Guinan')
-    OR (first_name ILIKE 'Jordan'  AND last_name ILIKE 'Wakem')
-    OR (first_name ILIKE 'Janet'   AND last_name ILIKE 'Campbell')
-    OR (first_name ILIKE 'Robert'  AND last_name ILIKE 'Johnson')
-    OR (first_name ILIKE 'Diego'   AND last_name ILIKE 'Legorreta')
-    OR (first_name ILIKE 'Arthur'  AND last_name ILIKE 'Zhiryada')
-    OR (first_name ILIKE 'Michael' AND last_name ILIKE 'Walker')
-    OR (first_name ILIKE 'Scott'   AND last_name ILIKE 'Miller')
-    OR (first_name ILIKE 'Paul'    AND last_name ILIKE 'Bridgehouse')
-    OR (first_name ILIKE 'Matthew' AND last_name ILIKE 'Miller')
-    OR (first_name ILIKE 'Stephen' AND last_name ILIKE 'Boughey')
-    OR (first_name ILIKE 'Darrin'  AND last_name ILIKE 'George')
-    OR (first_name ILIKE 'Katie'   AND last_name ILIKE 'Cardona')
-    OR (first_name ILIKE 'Scott'   AND last_name ILIKE 'Alt')
-    OR (first_name ILIKE 'Amanda'  AND last_name ILIKE 'Palmer')
-    -- EMS division support
-    OR (first_name ILIKE 'Sam'     AND last_name ILIKE 'Ruck')
-    OR (first_name ILIKE 'Emily'   AND last_name ILIKE 'Rodriguez')
-    OR (first_name ILIKE 'Briley'  AND last_name ILIKE 'Davis')
-    OR (first_name ILIKE 'Kelly'   AND last_name ILIKE 'Richardson')
-    -- Administration
-    OR (first_name ILIKE 'David'   AND last_name ILIKE 'Gerboth')
-    OR (first_name ILIKE 'Gina'    AND last_name ILIKE 'Cepeda')
-    OR (first_name ILIKE 'Dora'    AND last_name ILIKE 'Cardenas')
-    OR (first_name ILIKE 'Tige'    AND last_name ILIKE 'Harmon')
-    OR (first_name ILIKE 'Cord'    AND last_name ILIKE 'Von Derahe')
-    OR (first_name ILIKE 'Brian'   AND last_name ILIKE 'Carrara')
-    OR (first_name ILIKE 'Joe'     AND last_name ILIKE 'Hutchinson')
-    OR (first_name ILIKE 'Dean'    AND last_name ILIKE 'Chambers')
-    OR (first_name ILIKE 'Kelli'   AND last_name ILIKE 'Knowles')
- ORDER BY last_name, first_name;
+ WHERE id IN (
+     554, 3524, 6762, 6763, 3103, 5855,          -- deputy fire marshals FM1-FM6
+     7490, 7491,                                  -- inspectors
+     7536, 1733,  872, 3580,                      -- training division
+     7549, 2587, 7397, 7335, 7338, 7455, 6993,    -- EMS division
+     7184, 2459, 6400,                            -- Office of the Fire Chief
+      919, 1120,                                  -- Emergency Operations Division
+     3375, 6936, 1948, 6399,                      -- Business Operations Division
+     2830, 7356                                   -- REACH-1
+   )
+ ORDER BY id;
 
--- 3. Administration and EMS support staff are 40-hour civilians and may not be
---    in the employees table at all, which is set up around line personnel.
---    Anyone missing from query 2 is reported on the import screen as unmatched
---    and is not committed — they need an employees row before they will appear.
---    The DC of Operations post is deliberately vacant and needs no employee.
+-- 3. The reverse: which pinned IDs are absent? Expect no rows.
+SELECT 'missing_id' AS check, v.id
+  FROM (VALUES
+          (554),(3524),(6762),(6763),(3103),(5855),(7490),(7491),
+          (7536),(1733),(872),(3580),
+          (7549),(2587),(7397),(7335),(7338),(7455),(6993),
+          (7184),(2459),(6400),(919),(1120),(3375),(6936),(1948),(6399),
+          (2830),(7356)
+       ) AS v(id)
+ WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.id = v.id);
+
+-- The DC of Operations post is deliberately vacant and needs no employee.
