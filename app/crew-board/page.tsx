@@ -140,18 +140,30 @@ function crewSort(a: Assignment, b: Assignment): number {
   return (a.employees?.last_name ?? '').localeCompare(b.employees?.last_name ?? '')
 }
 
-function getStatusColor(app: AppWithCrew): 'green' | 'amber' | 'red' | 'gray' | 'blue' {
+/**
+ * The instant the board is describing.
+ *
+ * Staffing is a point in time, not a headcount: two members covering one seat
+ * in relief — 0800-1800 and 1800-0600 — are two bodies over the day but one
+ * seat at any moment. For the shift currently running that instant is now; for
+ * any other date it is that shift's 08:00 start, since "now" falls outside it
+ * and would empty every unit.
+ */
+function assessmentInstant(shiftDate: string): number {
+  const start = Date.parse(`${shiftDate}T15:00:00+00:00`)   // 08:00 Pacific
+  const end   = start + 24 * 60 * 60 * 1000
+  const now   = Date.now()
+  return now >= start && now < end ? now : start
+}
+
+function getStatusColor(app: AppWithCrew, at: number): 'green' | 'amber' | 'red' | 'gray' | 'blue' {
   if (app.isAdmin) return 'gray'
   if (app.computedUnstaffed) return 'blue'
   if (app.is_reserve) return 'gray'
   if (app.status === 'oos') return 'red'
   // Same seat-based assessment the card uses, so the dot cannot read green
   // over an unfilled captain's seat.
-  const staffing = assessStaffing(
-    app.type,
-    app.crew.map((a) => ({ rank: a.employees?.rank, assignmentType: a.assignment_type, isParamedic: a.employees?.is_paramedic })),
-    app.min_staffing,
-  )
+  const staffing = assessStaffing(app.type, crewForStaffing(app), app.min_staffing, at)
   return staffing.isShort ? 'amber' : 'green'
 }
 
@@ -170,8 +182,19 @@ function StatusDot({ color }: { color: 'green' | 'amber' | 'red' | 'gray' | 'blu
 
 // ── Apparatus card ─────────────────────────────────────────────────────────────
 
-function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }) {
-  const color = getStatusColor(app)
+/** Crew in the shape the staffing model wants, times included. */
+function crewForStaffing(app: AppWithCrew) {
+  return app.crew.map((a) => ({
+    rank:         a.employees?.rank,
+    assignmentType: a.assignment_type,
+    isParamedic:  a.employees?.is_paramedic,
+    startDt:      a.start_dt,
+    endDt:        a.end_dt,
+  }))
+}
+
+function ApparatusCard({ app, compact, at }: { app: AppWithCrew; compact?: boolean; at: number }) {
+  const color = getStatusColor(app, at)
   // Light-duty members are listed (they are at work and accounted for) but do
   // not fill a seat, so the roster and the count use different predicates.
   const onDutyCrew = app.crew.filter((a) => isOnDuty(a.assignment_type))
@@ -179,11 +202,7 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
   // Staffing is judged by seat, not headcount: an engine needs a captain, an
   // operator and a firefighter, a medic needs a paramedic and an EMT. Three
   // firefighters on an engine is three people and still no officer.
-  const staffing = assessStaffing(
-    app.type,
-    app.crew.map((a) => ({ rank: a.employees?.rank, assignmentType: a.assignment_type, isParamedic: a.employees?.is_paramedic })),
-    app.min_staffing,
-  )
+  const staffing = assessStaffing(app.type, crewForStaffing(app), app.min_staffing, at)
   const crewCount = staffing.staffingCount
   // A unit out on a temporary assignment is labelled with it and is not judged
   // against its normal minimum — it is not running its usual role.
@@ -325,18 +344,15 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
 
 // ── Station section ────────────────────────────────────────────────────────────
 
-function StationSection({ stationId, stationName, apps }: {
+function StationSection({ stationId, stationName, apps, at }: {
   stationId: number
   stationName: string
   apps: AppWithCrew[]
+  at: number
 }) {
   const shortCount = apps.filter((a) => {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
-    return assessStaffing(
-      a.type,
-      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type, isParamedic: c.employees?.is_paramedic })),
-      a.min_staffing,
-    ).isShort
+    return assessStaffing(a.type, crewForStaffing(a), a.min_staffing, at).isShort
   }).length
 
   return (
@@ -351,7 +367,7 @@ function StationSection({ stationId, stationName, apps }: {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {apps.sort(apparatusSort).map((app) => (
-          <ApparatusCard key={app.id} app={app} />
+          <ApparatusCard key={app.id} app={app} at={at} />
         ))}
       </div>
     </div>
@@ -360,20 +376,17 @@ function StationSection({ stationId, stationName, apps }: {
 
 // ── Battalion section ──────────────────────────────────────────────────────────
 
-function BattalionSection({ name, bcApp, stationGroups }: {
+function BattalionSection({ name, bcApp, stationGroups, at }: {
   name: string
   bcApp: AppWithCrew | undefined
   stationGroups: { id: number; name: string; apps: AppWithCrew[] }[]
+  at: number
 }) {
   const allApps = stationGroups.flatMap((s) => s.apps)
   const engines = allApps.filter((a) => a.type === 'engine' && a.status !== 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
   const shortUnits = allApps.filter((a) => {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
-    return assessStaffing(
-      a.type,
-      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type, isParamedic: c.employees?.is_paramedic })),
-      a.min_staffing,
-    ).isShort
+    return assessStaffing(a.type, crewForStaffing(a), a.min_staffing, at).isShort
   })
 
   const isNorth = name.toLowerCase().includes('north')
@@ -407,13 +420,13 @@ function BattalionSection({ name, bcApp, stationGroups }: {
               BATTALION COMMAND
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              <ApparatusCard app={bcApp} />
+              <ApparatusCard app={bcApp} at={at} />
             </div>
           </div>
         )}
         {stationGroups.map((sg) =>
           sg.apps.length > 0 ? (
-            <StationSection key={sg.id} stationId={sg.id} stationName={sg.name} apps={sg.apps} />
+            <StationSection key={sg.id} stationId={sg.id} stationName={sg.name} apps={sg.apps} at={at} />
           ) : null
         )}
       </div>
@@ -650,6 +663,11 @@ export default async function StaffingBoard({
 
   const isStale = shiftDate !== selectedDate
 
+  // Staffing is judged at a moment, not summed over the day — see
+  // assessmentInstant. Computed once here and passed down so every card, dot
+  // and short count on the page describes the same instant.
+  const at = assessmentInstant(shiftDate)
+
   // Load debit day workers for selected date
   const { data: debitRows } = await supabase
     .from(TABLES.debitDays)
@@ -705,11 +723,7 @@ export default async function StaffingBoard({
 
   const activeApps = apps.filter((a) => a.status !== 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
   const shortUnits = activeApps.filter((a) => {
-    return assessStaffing(
-      a.type,
-      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type, isParamedic: c.employees?.is_paramedic })),
-      a.min_staffing,
-    ).isShort
+    return assessStaffing(a.type, crewForStaffing(a), a.min_staffing, at).isShort
   })
   const oosUnits = apps.filter((a) => a.status === 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
 
@@ -910,7 +924,7 @@ export default async function StaffingBoard({
               name={bat.name}
               bcApp={bat.bcApp}
               stationGroups={bat.stationGroups}
-            />
+            at={at} />
           ))}
 
           {sectionData.map((section) => (
@@ -928,7 +942,7 @@ export default async function StaffingBoard({
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {group.apps.map((app) => (
-                          <ApparatusCard key={app.id} app={app} />
+                          <ApparatusCard key={app.id} app={app} at={at} />
                         ))}
                       </div>
                     </div>
@@ -937,7 +951,7 @@ export default async function StaffingBoard({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {section.apps.map((app) => (
-                    <ApparatusCard key={app.id} app={app} />
+                    <ApparatusCard key={app.id} app={app} at={at} />
                   ))}
                 </div>
               )}
@@ -951,7 +965,7 @@ export default async function StaffingBoard({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {unclaimed.sort(apparatusSort).map((app) => (
-                  <ApparatusCard key={app.id} app={app} />
+                  <ApparatusCard key={app.id} app={app} at={at} />
                 ))}
               </div>
             </div>

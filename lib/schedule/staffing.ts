@@ -104,6 +104,24 @@ export interface CrewMemberForStaffing {
   assignmentType: string
   /** employees.is_paramedic — decides whether a captain may hold a medic seat. */
   isParamedic?: boolean | null
+  /** When this member comes on and off. Null means the whole shift. */
+  startDt?: string | null
+  endDt?: string | null
+}
+
+/**
+ * Is this member aboard at the given instant?
+ *
+ * A member with no recorded window is treated as covering the whole shift,
+ * which is what a row written before start_dt and end_dt were populated looks
+ * like — better to count them than to empty a unit on missing data.
+ */
+function isAboardAt(member: CrewMemberForStaffing, at: number): boolean {
+  if (!member.startDt || !member.endDt) return true
+  const start = Date.parse(member.startDt)
+  const end   = Date.parse(member.endDt)
+  if (Number.isNaN(start) || Number.isNaN(end)) return true
+  return at >= start && at < end
 }
 
 export interface StaffingAssessment {
@@ -125,13 +143,22 @@ export interface StaffingAssessment {
  * captain and a firefighter for CPT/AO/FF seats, taking the captain for the
  * firefighter seat first would report the captain's seat open. Crews are small
  * enough that exact matching costs nothing.
+ *
+ * `at` makes the answer a point in time rather than a headcount. Two members
+ * covering one seat in relief — 0800-1800 and 1800-0600 — are two bodies over
+ * the day but one seat at any moment, and counting both reported Engine 1 as
+ * 4/3 when it was properly staffed with a relief. Pass the instant the board is
+ * describing; omit it to count everyone assigned, which is the right answer
+ * when planning a day rather than looking at one.
  */
 export function assessStaffing(
   apparatusType: string | null | undefined,
   crew: readonly CrewMemberForStaffing[],
   minStaffing: number,
+  at?: number | null,
 ): StaffingAssessment {
-  const counting = crew.filter((c) => countsForStaffing(c.assignmentType))
+  const present = at == null ? crew : crew.filter((c) => isAboardAt(c, at))
+  const counting = present.filter((c) => countsForStaffing(c.assignmentType))
   const staffingCount = counting.length
   const seats = seatsForType(apparatusType)
 
