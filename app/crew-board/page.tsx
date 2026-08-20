@@ -9,7 +9,11 @@ import {
   assignmentLabel,
 } from '@/lib/schedule/assignment-types'
 import { CREW_BOARD_COLUMNS } from '@/lib/schedule/daily-assignment'
-import { ADMIN_UNITS, apparatusCountsTowardMinimum } from '@/lib/schedule/apparatus'
+import {
+  ADMIN_UNITS,
+  apparatusCountsTowardMinimum,
+  missingMinStaffingUnits,
+} from '@/lib/schedule/apparatus'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -572,6 +576,17 @@ export default async function StaffingBoard({
 
   if (apErr) return <ErrorScreen err={apErr} />
 
+  // The minimum-staffing allowlist is hand-maintained. If a unit on it is not
+  // in the apparatus table — renamed, retired, typo'd — it contributes nothing
+  // and the daily total silently reads low with no visible cause.
+  const missingUnits = missingMinStaffingUnits((apparatus ?? []).map((ap) => ap.id))
+  if (missingUnits.length > 0) {
+    console.warn(
+      `[crew-board] minimum-staffing units absent from the apparatus table: ${missingUnits.join(', ')}. ` +
+      `Daily total will read low until MIN_STAFFING_UNITS in lib/schedule/apparatus.ts is corrected.`,
+    )
+  }
+
   // Load assignments for selected date — updated to include shift_assignment
   let shiftDate   = selectedDate
   let assignments: Assignment[] = []
@@ -640,11 +655,10 @@ export default async function StaffingBoard({
   }))
 
   // Summary metrics
-  // Gauged against MIN_STAFFING below, so this is a line-seat count, not a
-  // headcount: it excludes both assignment types that do not fill a seat
-  // (leave, light duty) and whole units that are not line units (DFM, EMS,
-  // training, LD). Counting administration and specialty bodies here would let
-  // the board read "41 ✓" while apparatus sat short.
+  // Minimum staffing counts only bodies on active apparatus (see
+  // MIN_STAFFING_UNITS), and only assignment types that fill a seat. Reserve,
+  // brush, harbor, administration and specialty assignments are all excluded,
+  // whether or not they are staffed.
   const onDutyTotal = assignments.filter((a) =>
     countsForStaffing(a.assignment_type) && apparatusCountsTowardMinimum(a.apparatus_id),
   ).length
