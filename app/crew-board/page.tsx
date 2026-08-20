@@ -659,9 +659,18 @@ export default async function StaffingBoard({
   // MIN_STAFFING_UNITS), and only assignment types that fill a seat. Reserve,
   // brush, harbor, administration and specialty assignments are all excluded,
   // whether or not they are staffed.
-  const onDutyTotal = assignments.filter((a) =>
-    countsForStaffing(a.assignment_type) && apparatusCountsTowardMinimum(a.apparatus_id),
-  ).length
+  // Counted by distinct employee, not by row. A member cross-staffed on both
+  // an engine and its medic holds two daily_assignments rows but is one body
+  // on the floor, and minimum staffing is a headcount of people.
+  const onDutyTotal = new Set(
+    assignments
+      .filter((a) =>
+        countsForStaffing(a.assignment_type) &&
+        apparatusCountsTowardMinimum(a.apparatus_id) &&
+        a.employee_id != null,
+      )
+      .map((a) => a.employee_id),
+  ).size
   const MIN_STAFFING = 41
   const staffingOk = onDutyTotal >= MIN_STAFFING
 

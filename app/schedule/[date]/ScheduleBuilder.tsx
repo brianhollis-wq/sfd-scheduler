@@ -573,11 +573,18 @@ export default function ScheduleBuilder({
 
   // Computed stats
   const allPositions     = [...posMap.values()].flat()
-  // Must match the crew board's "On Duty" tile exactly — same two exclusions:
-  // assignment types that do not fill a seat, and administration/specialty units.
-  const onDutyCount      = allPositions.filter(p =>
-    countsForStaffing(p.assignmentType) && p.employee && apparatusCountsTowardMinimum(p.apparatusId),
-  ).length
+  // Must match the crew board's "On Duty" tile exactly: seat-filling assignment
+  // types, on an active apparatus, counted by distinct employee so a member
+  // cross-staffed on an engine and its medic is one body, not two.
+  const onDutyCount      = new Set(
+    allPositions
+      .filter(p =>
+        countsForStaffing(p.assignmentType) &&
+        p.employee &&
+        apparatusCountsTowardMinimum(p.apparatusId),
+      )
+      .map(p => p.employee!.id),
+  ).size
   const totalModified    = allPositions.filter(p => p.isModified).length
   const shiftBadgeClass  = SHIFT_BADGE[shiftLetter] ?? 'text-neutral-400 border-neutral-700 bg-neutral-900/20'
 
