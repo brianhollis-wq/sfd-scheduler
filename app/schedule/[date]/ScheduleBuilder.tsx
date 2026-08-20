@@ -19,6 +19,7 @@ import {
   assignmentLabel,
 } from '@/lib/schedule/assignment-types'
 import { apparatusCountsTowardMinimum } from '@/lib/schedule/apparatus'
+import { rankLabel } from '@/lib/employees/rank'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -77,12 +78,6 @@ const BATTALIONS = [
 const LEAVE_TYPES    = LEAVE_TYPE_OPTIONS
 const CALLBACK_TYPES = ASSIGNABLE_TYPE_OPTIONS
 
-const RANK_LABEL: Record<string, string> = {
-  BC: 'BC', Captain: 'CAPT', FAO: 'FAO', SRP: 'SRP', SRE: 'SRE',
-  FF_PM: 'PM/FF', FF: 'FF', Probationary_FF: 'PROB', Probationary_PM: 'PROB/PM',
-  DFM: 'DFM', Senior_DFM: 'SR DFM', Staff: 'STAFF',
-}
-
 const TYPE_ORDER: Record<string, number> = {
   bc: 0, engine: 1, truck: 2, medic: 3, rescue: 4, brush: 5, utility: 6,
 }
@@ -97,8 +92,6 @@ const SHIFT_BADGE: Record<string, string> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function posKey(p: EditablePosition) { return p.key }
-
-function rankLabel(r: string) { return RANK_LABEL[r] ?? r.toUpperCase() }
 
 const leaveLabel    = assignmentLabel
 const callbackLabel = assignmentLabel
