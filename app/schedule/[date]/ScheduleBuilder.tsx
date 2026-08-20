@@ -229,7 +229,7 @@ function ApparatusCard({
   // members and interns stay listed but fill nothing — see countsForStaffing.
   const staffing = assessStaffing(
     app.type,
-    positions.map(p => ({ rank: p.employee?.rank, assignmentType: p.employee ? p.assignmentType : 'vacant' })),
+    positions.map(p => ({ rank: p.employee?.rank, assignmentType: p.employee ? p.assignmentType : 'vacant', isParamedic: p.employee?.is_paramedic })),
     app.min_staffing,
   )
   const onDutyCount = staffing.staffingCount
@@ -374,6 +374,7 @@ function StationSection({ stationId, stationName, apps, posMap, onUpdate, onAddO
       a.type,
       (posMap.get(a.apparatus_id) ?? []).map(p => ({
         rank: p.employee?.rank, assignmentType: p.employee ? p.assignmentType : 'vacant',
+        isParamedic: p.employee?.is_paramedic,
       })),
       a.min_staffing,
     ).isShort
@@ -428,6 +429,7 @@ function BattalionSection({ battalion, apparatuses, posMap, onUpdate, onAddOT }:
       a.type,
       (posMap.get(a.apparatus_id) ?? []).map(p => ({
         rank: p.employee?.rank, assignmentType: p.employee ? p.assignmentType : 'vacant',
+        isParamedic: p.employee?.is_paramedic,
       })),
       a.min_staffing,
     ).isShort
@@ -609,6 +611,7 @@ export default function ScheduleBuilder({
       app.type,
       (posMap.get(app.apparatus_id) ?? []).map(p => ({
         rank: p.employee?.rank, assignmentType: p.employee ? p.assignmentType : 'vacant',
+        isParamedic: p.employee?.is_paramedic,
       })),
       app.min_staffing,
     ).isShort

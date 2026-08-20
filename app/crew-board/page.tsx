@@ -149,7 +149,7 @@ function getStatusColor(app: AppWithCrew): 'green' | 'amber' | 'red' | 'gray' | 
   // over an unfilled captain's seat.
   const staffing = assessStaffing(
     app.type,
-    app.crew.map((a) => ({ rank: a.employees?.rank, assignmentType: a.assignment_type })),
+    app.crew.map((a) => ({ rank: a.employees?.rank, assignmentType: a.assignment_type, isParamedic: a.employees?.is_paramedic })),
     app.min_staffing,
   )
   return staffing.isShort ? 'amber' : 'green'
@@ -181,7 +181,7 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
   // firefighters on an engine is three people and still no officer.
   const staffing = assessStaffing(
     app.type,
-    app.crew.map((a) => ({ rank: a.employees?.rank, assignmentType: a.assignment_type })),
+    app.crew.map((a) => ({ rank: a.employees?.rank, assignmentType: a.assignment_type, isParamedic: a.employees?.is_paramedic })),
     app.min_staffing,
   )
   const crewCount = staffing.staffingCount
@@ -334,7 +334,7 @@ function StationSection({ stationId, stationName, apps }: {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
     return assessStaffing(
       a.type,
-      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type })),
+      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type, isParamedic: c.employees?.is_paramedic })),
       a.min_staffing,
     ).isShort
   }).length
@@ -371,7 +371,7 @@ function BattalionSection({ name, bcApp, stationGroups }: {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
     return assessStaffing(
       a.type,
-      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type })),
+      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type, isParamedic: c.employees?.is_paramedic })),
       a.min_staffing,
     ).isShort
   })
@@ -709,7 +709,7 @@ export default async function StaffingBoard({
   const shortUnits = activeApps.filter((a) => {
     return assessStaffing(
       a.type,
-      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type })),
+      a.crew.map((c) => ({ rank: c.employees?.rank, assignmentType: c.assignment_type, isParamedic: c.employees?.is_paramedic })),
       a.min_staffing,
     ).isShort
   })
