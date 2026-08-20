@@ -8,6 +8,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
+import { TABLES } from '@/lib/db/tables'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -24,7 +25,7 @@ async function getUpcomingShifts(startDate: string, days: number) {
   const endDate = end.toISOString().slice(0, 10)
 
   const { data } = await supabase
-    .from('shift_calendar')
+    .from(TABLES.shiftCalendar)
     .select('shift_date, shift_letter')
     .gte('shift_date', startDate)
     .lte('shift_date', endDate)

@@ -1,6 +1,14 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import DateNavClient from './DateNavClient'
+import { TABLES } from '@/lib/db/tables'
+import {
+  INTERN_TYPES,
+  countsForStaffing,
+  isOnDuty,
+  assignmentLabel,
+} from '@/lib/schedule/assignment-types'
+import { CREW_BOARD_COLUMNS } from '@/lib/schedule/daily-assignment'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -101,37 +109,10 @@ function apparatusSort(a: AppWithCrew, b: AppWithCrew): number {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const ON_DUTY_TYPES = new Set(['regular', 'callback_voluntary', 'callback_mandatory', 'peak_engine', 'trade', 'light_duty'])
-
-/** Assignment types shown as interns — non-staffing, accountability only */
-const INTERN_TYPES = new Set(['ccc_intern'])
-
 const CREW_RANK_ORDER: Record<string, number> = {
   BC: 1, Senior_DFM: 2, DFM: 3, Captain: 4, FAO: 5,
   SRP: 6, SRE: 7, FF_PM: 8, FF: 9,
   Probationary_PM: 10, Probationary_FF: 11, Staff: 12,
-}
-
-const LEAVE_LABELS: Record<string, string> = {
-  vacation:  'Vacation',
-  sick:      'Sick Leave',
-  FMLA:      'FMLA',
-  OFLA:      'OFLA',
-  PLO:       'PLO',
-  injury:    'Injury Leave',
-  kelly_day: 'Kelly Day',
-  WOC:       'WOC',
-  AIC:       'AIC',
-  BUM:       'BUM',
-}
-
-const DUTY_LABELS: Record<string, string> = {
-  regular:            'Regular',
-  callback_voluntary: 'Callback VOL',
-  callback_mandatory: 'Callback MAN',
-  peak_engine:        'Peak Engine',
-  trade:              'Trade',
-  light_duty:         'Light Duty',
 }
 
 function fmtTime(dt: string | null): string {
@@ -160,7 +141,7 @@ function getStatusColor(app: AppWithCrew): 'green' | 'amber' | 'red' | 'gray' | 
   if (app.computedUnstaffed) return 'blue'
   if (app.is_reserve) return 'gray'
   if (app.status === 'oos') return 'red'
-  const crewCount = app.crew.filter((a) => ON_DUTY_TYPES.has(a.assignment_type)).length
+  const crewCount = app.crew.filter((a) => countsForStaffing(a.assignment_type)).length
   if (crewCount < app.min_staffing) return 'amber'
   return 'green'
 }
@@ -201,9 +182,11 @@ function StatusDot({ color }: { color: 'green' | 'amber' | 'red' | 'gray' | 'blu
 
 function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }) {
   const color = getStatusColor(app)
-  const onDutyCrew = app.crew.filter((a) => ON_DUTY_TYPES.has(a.assignment_type))
+  // Light-duty members are listed (they are at work and accounted for) but do
+  // not fill a seat, so the roster and the count use different predicates.
+  const onDutyCrew = app.crew.filter((a) => isOnDuty(a.assignment_type))
   const internCrew = app.crew.filter((a) => INTERN_TYPES.has(a.assignment_type))
-  const crewCount = onDutyCrew.length
+  const crewCount = onDutyCrew.filter((a) => countsForStaffing(a.assignment_type)).length
   const short = !app.isAdmin && !app.is_reserve && !app.computedUnstaffed && crewCount < app.min_staffing && app.status !== 'oos'
   const spotsNeeded = Math.max(0, app.min_staffing - crewCount)
 
@@ -270,6 +253,10 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
                   {a.employees?.is_paramedic && (
                     <span className="text-blue-400 text-[9px] font-bold tracking-widest">PM</span>
                   )}
+                  {/* Listed but not counted toward min staffing — see countsForStaffing */}
+                  {!countsForStaffing(a.assignment_type) && (
+                    <span className="text-purple-400/80 text-[9px] font-bold tracking-widest">LD</span>
+                  )}
                   <span className={`text-[9px] font-mono tabular-nums shrink-0 ${full ? 'text-zinc-400' : 'text-amber-400 font-bold'}`}>
                     {timeStr}
                   </span>
@@ -322,7 +309,7 @@ function StationSection({ stationId, stationName, apps }: {
 }) {
   const shortCount = apps.filter((a) => {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
-    const crew = a.crew.filter((c) => ON_DUTY_TYPES.has(c.assignment_type)).length
+    const crew = a.crew.filter((c) => countsForStaffing(c.assignment_type)).length
     return crew < a.min_staffing
   }).length
 
@@ -356,7 +343,7 @@ function BattalionSection({ name, bcApp, stationGroups }: {
   const engines = allApps.filter((a) => a.type === 'engine' && a.status !== 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
   const shortUnits = allApps.filter((a) => {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
-    const crew = a.crew.filter((c) => ON_DUTY_TYPES.has(c.assignment_type)).length
+    const crew = a.crew.filter((c) => countsForStaffing(c.assignment_type)).length
     return crew < a.min_staffing
   })
 
@@ -412,7 +399,7 @@ function PersonnelView({ assignments, debitRows }: {
   debitRows:   DebitRow[]
 }) {
   const onDuty = assignments
-    .filter(a => ON_DUTY_TYPES.has(a.assignment_type) && a.employees)
+    .filter(a => isOnDuty(a.assignment_type) && a.employees)
     .sort((a, b) => {
       const ra = CREW_RANK_ORDER[a.employees?.rank ?? ''] ?? 99
       const rb = CREW_RANK_ORDER[b.employees?.rank ?? ''] ?? 99
@@ -421,7 +408,7 @@ function PersonnelView({ assignments, debitRows }: {
     })
 
   const onLeave = assignments
-    .filter(a => !ON_DUTY_TYPES.has(a.assignment_type) && a.employees)
+    .filter(a => !isOnDuty(a.assignment_type) && a.employees)
     .sort((a, b) => {
       if (a.assignment_type !== b.assignment_type) return a.assignment_type.localeCompare(b.assignment_type)
       return (a.employees?.last_name ?? '').localeCompare(b.employees?.last_name ?? '')
@@ -463,7 +450,7 @@ function PersonnelView({ assignments, debitRows }: {
                     </td>
                     <td className={`${td} text-[#c9a84c]`}>{formatRank(a.employees!.rank)}</td>
                     <td className={`${td} text-zinc-300 font-mono tracking-widest`}>{a.apparatus_id || '—'}</td>
-                    <td className={`${td} text-zinc-400`}>{DUTY_LABELS[a.assignment_type] ?? a.assignment_type}</td>
+                    <td className={`${td} text-zinc-400`}>{assignmentLabel(a.assignment_type)}</td>
                     <td className={`${td} text-zinc-500`}>{a.employees!.shift_assignment ?? '—'}</td>
                     <td className={td}>
                       {a.employees!.is_paramedic && (
@@ -506,7 +493,7 @@ function PersonnelView({ assignments, debitRows }: {
                     </td>
                     <td className={`${td} text-[#c9a84c]`}>{formatRank(a.employees!.rank)}</td>
                     <td className={`${td} text-amber-300/80`}>
-                      {LEAVE_LABELS[a.assignment_type] ?? a.assignment_type}
+                      {assignmentLabel(a.assignment_type)}
                     </td>
                     <td className={`${td} text-zinc-500`}>{a.employees!.shift_assignment ?? '—'}</td>
                   </tr>
@@ -581,7 +568,7 @@ export default async function StaffingBoard({
 
   // Load apparatus
   const { data: apparatus, error: apErr } = await supabase
-    .from('apparatus')
+    .from(TABLES.apparatus)
     .select('*, stations(id, name)')
     .order('id')
 
@@ -592,10 +579,8 @@ export default async function StaffingBoard({
   let assignments: Assignment[] = []
 
   const { data: dateData, error: asErr } = await supabase
-    .from('daily_assignments')
-    .select(
-      'apparatus_id, employee_id, assignment_type, start_dt, end_dt, employees(first_name, last_name, rank, badge_number, is_paramedic, shift_assignment)'
-    )
+    .from(TABLES.dailyAssignments)
+    .select(CREW_BOARD_COLUMNS)
     .eq('shift_date', selectedDate)
 
   if (asErr) return <ErrorScreen err={asErr} />
@@ -605,7 +590,7 @@ export default async function StaffingBoard({
   } else if (selectedDate === today) {
     // Only fall back to most recent date when viewing today with no data
     const { data: latest } = await supabase
-      .from('daily_assignments')
+      .from(TABLES.dailyAssignments)
       .select('shift_date')
       .order('shift_date', { ascending: false })
       .limit(1)
@@ -614,7 +599,7 @@ export default async function StaffingBoard({
     if (latest?.shift_date) {
       shiftDate = latest.shift_date
       const { data: fallbackData } = await supabase
-        .from('daily_assignments')
+        .from(TABLES.dailyAssignments)
         .select(
           'apparatus_id, employee_id, assignment_type, start_dt, end_dt, employees(first_name, last_name, rank, badge_number, is_paramedic, shift_assignment)'
         )
@@ -627,7 +612,7 @@ export default async function StaffingBoard({
 
   // Load debit day workers for selected date
   const { data: debitRows } = await supabase
-    .from('debit_days')
+    .from(TABLES.debitDays)
     .select('employee_name, apparatus, position, shift_letter')
     .eq('debit_date', shiftDate)
     .eq('status', 'scheduled')
@@ -635,7 +620,7 @@ export default async function StaffingBoard({
 
   // Load shift letter
   const { data: rotationRow } = await supabase
-    .from('shift_rotation')
+    .from(TABLES.shiftRotation)
     .select('shift_letter')
     .eq('shift_date', shiftDate)
     .single()
@@ -657,13 +642,14 @@ export default async function StaffingBoard({
   }))
 
   // Summary metrics
-  const onDutyTotal = assignments.filter((a) => ON_DUTY_TYPES.has(a.assignment_type)).length
+  // Gauged against MIN_STAFFING below, so this is a seat count, not a headcount.
+  const onDutyTotal = assignments.filter((a) => countsForStaffing(a.assignment_type)).length
   const MIN_STAFFING = 41
   const staffingOk = onDutyTotal >= MIN_STAFFING
 
   const activeApps = apps.filter((a) => a.status !== 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
   const shortUnits = activeApps.filter((a) => {
-    const crew = a.crew.filter((c) => ON_DUTY_TYPES.has(c.assignment_type)).length
+    const crew = a.crew.filter((c) => countsForStaffing(c.assignment_type)).length
     return crew < a.min_staffing
   })
   const oosUnits = apps.filter((a) => a.status === 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
@@ -688,7 +674,7 @@ export default async function StaffingBoard({
   const unclaimed = apps.filter((a) => {
     if (!accountedIds.has(a.id)) {
       if (a.isAdmin) {
-        const hasCrew = a.crew.filter((c) => ON_DUTY_TYPES.has(c.assignment_type)).length > 0
+        const hasCrew = a.crew.filter((c) => isOnDuty(c.assignment_type)).length > 0
         return hasCrew || isWeekday
       }
       return true

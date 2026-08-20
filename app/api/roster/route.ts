@@ -42,6 +42,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TABLES } from '@/lib/db/tables'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
 
   // 1. Look up shift letter for this date
   const { data: calRow, error: calErr } = await supabase
-    .from('shift_calendar')
+    .from(TABLES.shiftCalendar)
     .select('shift_letter')
     .eq('shift_date', dateParam)
     .maybeSingle()
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
 
   // 2. Pull all shift_roster rows for this shift letter, joined with employee info
   const { data: rosterRows, error: rosterErr } = await supabase
-    .from('shift_roster')
+    .from(TABLES.shiftRoster)
     .select(`
       id,
       apparatus_id,
@@ -113,7 +114,7 @@ export async function GET(request: NextRequest) {
   const apparatusIds = [...new Set((rosterRows ?? []).map((r) => r.apparatus_id))]
 
   const { data: apparatusRows, error: appErr } = await supabase
-    .from('apparatuses')
+    .from(TABLES.apparatus)
     .select(`
       id,
       call_sign,

@@ -8,6 +8,12 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ParsedRow } from '@/lib/parse-schedule'
+import { TABLES } from '@/lib/db/tables'
+import {
+  buildDailyAssignmentRow,
+  withGeneratedSortOrder,
+} from '@/lib/schedule/daily-assignment'
+import { standardShiftWindow } from '@/lib/schedule/shift-window'
 
 // ────────────────────────────────────────────────────────────────
 // Types shared with the client
@@ -34,11 +40,9 @@ const REACH1_APPARATUS_ID = 'REACH-1'
 const REACH1_PERMANENT_CREW: Array<{
   employee_id:     number
   assignment_type: string
-  hours_scheduled: number
-  is_ot:           boolean
 }> = [
-  { employee_id: 2830, assignment_type: 'regular', hours_scheduled: 24, is_ot: false }, // Scott Alt
-  { employee_id: 7356, assignment_type: 'regular', hours_scheduled: 24, is_ot: false }, // Amanda Palmer
+  { employee_id: 2830, assignment_type: 'regular' }, // Scott Alt
+  { employee_id: 7356, assignment_type: 'regular' }, // Amanda Palmer
 ]
 
 /** Returns true if a YYYY-MM-DD date string falls on Tuesday–Friday UTC. */
@@ -61,14 +65,14 @@ export async function commitScheduleAction(
 
     // Delete all existing assignments for this date
     const { error: delErr } = await supabase
-      .from('daily_assignments')
+      .from(TABLES.dailyAssignments)
       .delete()
       .eq('shift_date', shiftDate)
     if (delErr) throw delErr
 
     // Fetch all valid apparatus IDs so we can skip FK violations
     const { data: apparatusRows, error: apErr } = await supabase
-      .from('apparatus')
+      .from(TABLES.apparatus)
       .select('id')
     if (apErr) throw apErr
     const validApparatus = new Set((apparatusRows ?? []).map((a: { id: string }) => a.id))
@@ -82,16 +86,26 @@ export async function commitScheduleAction(
     let insertedCount = 0
 
     if (toInsert.length > 0) {
-      const { error: insErr } = await supabase.from('daily_assignments').insert(
-        toInsert.map((r) => ({
-          shift_date:      shiftDate,
-          apparatus_id:    r.apparatusId,
-          employee_id:     r.employeeId,
-          assignment_type: r.assignmentType,
-          start_dt:        r.startDt,
-          end_dt:          r.endDt,
-          hours_scheduled: r.hoursScheduled,
-          is_ot:           r.isOt,
+      // The PDF lists crew in printed order per apparatus but carries no seat
+      // or ordering column, so sort_order is generated here and `position`
+      // falls back to UNKNOWN_POSITION inside buildDailyAssignmentRow. Without
+      // both, a day imported from PDF could not be re-opened in the schedule
+      // builder, which orders and labels rows by exactly those columns.
+      const ordered = withGeneratedSortOrder(toInsert, (r) => r.apparatusId)
+
+      const { error: insErr } = await supabase.from(TABLES.dailyAssignments).insert(
+        ordered.map(({ row: r, sortOrder }) => buildDailyAssignmentRow({
+          shiftDate,
+          apparatusId:    r.apparatusId,
+          employeeId:     r.employeeId,
+          assignmentType: r.assignmentType,
+          sortOrder,
+          // The parser already resolved the window from the PDF (inline time
+          // ranges, half shifts, light duty) and the OT type code — pass both
+          // through rather than re-deriving them from assignment_type.
+          window:         { startDt: r.startDt, endDt: r.endDt, hoursScheduled: r.hoursScheduled },
+          isOt:           r.isOt,
+          publishedBy:    'pdf-import',
         })),
       )
       if (insErr) throw insErr
@@ -101,17 +115,18 @@ export async function commitScheduleAction(
     // Auto-populate REACH-1 on Tue–Fri with permanent crew (Scott Alt & Amanda Palmer).
     // These employees never appear in the daily PDF, so we always upsert them here.
     if (isTueToFri(shiftDate) && validApparatus.has(REACH1_APPARATUS_ID)) {
-      const reach1Rows = REACH1_PERMANENT_CREW.map((c) => ({
-        shift_date:      shiftDate,
-        apparatus_id:    REACH1_APPARATUS_ID,
-        employee_id:     c.employee_id,
-        assignment_type: c.assignment_type,
-        hours_scheduled: c.hours_scheduled,
-        is_ot:           c.is_ot,
+      const reach1Rows = REACH1_PERMANENT_CREW.map((c, i) => buildDailyAssignmentRow({
+        shiftDate,
+        apparatusId:    REACH1_APPARATUS_ID,
+        employeeId:     c.employee_id,
+        assignmentType: c.assignment_type,
+        sortOrder:      i * 10,
+        window:         standardShiftWindow(shiftDate),
+        publishedBy:    'pdf-import',
       }))
 
       const { error: r1Err } = await supabase
-        .from('daily_assignments')
+        .from(TABLES.dailyAssignments)
         .insert(reach1Rows)
       if (r1Err) throw r1Err
 

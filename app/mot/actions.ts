@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { TABLES } from '@/lib/db/tables'
 
 // Record a mandate: moves the person to the bottom of the list and sets the date
 export async function recordMandateAction(
@@ -14,7 +15,7 @@ export async function recordMandateAction(
 
   // Fetch current record
   const { data: current, error: fetchErr } = await supabase
-    .from('ot_list_positions')
+    .from(TABLES.otListPositions)
     .select('times_mandatoried')
     .eq('id', listPositionId)
     .single()
@@ -25,7 +26,7 @@ export async function recordMandateAction(
 
   // Find current max rank for this list so we can append to the bottom
   const { data: maxRow, error: maxErr } = await supabase
-    .from('ot_list_positions')
+    .from(TABLES.otListPositions)
     .select('mandatory_rank')
     .eq('list_type', listType)
     .eq('fiscal_year', fiscalYear)
@@ -42,7 +43,7 @@ export async function recordMandateAction(
   const newTimes = (current.times_mandatoried ?? 0) + 1
 
   const { error: updateErr } = await supabase
-    .from('ot_list_positions')
+    .from(TABLES.otListPositions)
     .update({
       mandatory_rank:     newRank,
       last_mandatory_date: mandateDate,
@@ -66,7 +67,7 @@ export async function setLastMandatoryDateAction(
   const supabase = createAdminClient()
 
   const { error } = await supabase
-    .from('ot_list_positions')
+    .from(TABLES.otListPositions)
     .update({ last_mandatory_date: mandateDate })
     .eq('id', listPositionId)
 

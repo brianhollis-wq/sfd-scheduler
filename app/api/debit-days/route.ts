@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TABLES } from '@/lib/db/tables'
 
 // SFD Fiscal Year starts July 1
 function fiscalYear(date: Date): number {
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   // Fetch all debit days from today through end of fiscal year
   const { data: rows, error } = await supabase
-    .from('debit_days')
+    .from(TABLES.debitDays)
     .select('id, employee_id, employee_name, shift_letter, track, apparatus, position, debit_date, status, notes')
     .gte('debit_date', todayStr)
     .lte('debit_date', fyEnd)

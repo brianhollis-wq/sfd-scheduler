@@ -1,15 +1,20 @@
 /**
  * POST /api/assignments/publish
  *
- * Accepts a daily assignment grid and upserts it into daily_assignments.
- * Existing assignments for the given date are deleted then replaced
- * (full replace, not partial patch) so the board always reflects the
- * latest published state.
+ * Accepts a daily assignment grid from the schedule builder and replaces
+ * daily_assignments for that date (full replace, not a partial patch) so the
+ * crew board always reflects the latest published state.
+ *
+ * Rows are built by buildDailyAssignmentRow(), the same helper the PDF importer
+ * uses, so a published day and an imported day are column-for-column identical.
+ * Before that was shared, published rows carried no start_dt/end_dt/hours and
+ * the crew board rendered them as "????–????".
  *
  * Body (JSON):
  * {
  *   date:        string              // YYYY-MM-DD
  *   shiftLetter: string              // A | B | C | D
+ *   publishedBy?: string
  *   entries: AssignmentEntry[]
  * }
  *
@@ -18,30 +23,19 @@
  *   apparatus_id:      string
  *   employee_id:       number | null   // null = open vacancy
  *   position:          string          // Captain | BC | ENG_P | FF_PM | ...
- *   assignment_type:   string          // regular | callback_voluntary | callback_mandatory | vacation | sick | ...
+ *   assignment_type:   string          // see lib/schedule/assignment-types
  *   sort_order:        number
  *   note:              string | null
  * }
  *
- * The daily_assignments table schema:
- *   CREATE TABLE IF NOT EXISTS daily_assignments (
- *     id              serial PRIMARY KEY,
- *     shift_date      date NOT NULL,
- *     apparatus_id    text NOT NULL REFERENCES apparatuses(id),
- *     employee_id     integer REFERENCES employees(id) ON DELETE SET NULL,
- *     position        text NOT NULL,
- *     assignment_type text NOT NULL DEFAULT 'regular',
- *     sort_order      smallint NOT NULL DEFAULT 0,
- *     note            text,
- *     published_by    text,   -- free-text for now; can be a user ID later
- *     created_at      timestamptz NOT NULL DEFAULT now(),
- *     updated_at      timestamptz NOT NULL DEFAULT now()
- *   );
- *   CREATE INDEX IF NOT EXISTS daily_assignments_date_idx ON daily_assignments (shift_date);
+ * See db/001_daily_assignments_reconcile.sql for the columns this writes.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TABLES } from '@/lib/db/tables'
+import { buildDailyAssignmentRow } from '@/lib/schedule/daily-assignment'
+import { ON_DUTY_TYPES, LEAVE_TYPES, INTERN_TYPES } from '@/lib/schedule/assignment-types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -56,10 +50,14 @@ interface AssignmentEntry {
 }
 
 interface PublishBody {
-  date:        string
-  shiftLetter: string
-  entries:     AssignmentEntry[]
+  date:         string
+  shiftLetter:  string
+  entries:      AssignmentEntry[]
   publishedBy?: string
+}
+
+function isKnownAssignmentType(t: string): boolean {
+  return ON_DUTY_TYPES.has(t) || LEAVE_TYPES.has(t) || INTERN_TYPES.has(t)
 }
 
 export async function POST(request: NextRequest) {
@@ -82,11 +80,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'entries must be an array' }, { status: 400 })
   }
 
+  // Reject unknown assignment types up front. Downstream readers (crew board,
+  // MOT and callback eligibility) key entirely off assignment_type, so a typo
+  // here would silently drop a member out of every staffing and OT calculation.
+  const unknownTypes = entries
+    .map((e) => e.assignment_type)
+    .filter((t, i, all) => t && !isKnownAssignmentType(t) && all.indexOf(t) === i)
+  if (unknownTypes.length > 0) {
+    return NextResponse.json(
+      { error: `Unknown assignment_type: ${unknownTypes.join(', ')}` },
+      { status: 400 },
+    )
+  }
+
+  const invalidApparatus = entries.filter((e) => !e.apparatus_id)
+  if (invalidApparatus.length > 0) {
+    return NextResponse.json({ error: 'Every entry needs an apparatus_id' }, { status: 400 })
+  }
+
   const supabase = createAdminClient()
 
   // Delete existing assignments for this date, then insert fresh
   const { error: deleteErr } = await supabase
-    .from('daily_assignments')
+    .from(TABLES.dailyAssignments)
     .delete()
     .eq('shift_date', date)
 
@@ -99,19 +115,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, inserted: 0 })
   }
 
-  const rows = entries.map((e) => ({
-    shift_date:      date,
-    apparatus_id:    e.apparatus_id,
-    employee_id:     e.employee_id ?? null,
-    position:        e.position,
-    assignment_type: e.assignment_type ?? 'regular',
-    sort_order:      e.sort_order ?? 0,
-    note:            e.note ?? null,
-    published_by:    publishedBy ?? null,
+  const rows = entries.map((e) => buildDailyAssignmentRow({
+    shiftDate:      date,
+    apparatusId:    e.apparatus_id,
+    employeeId:     e.employee_id,
+    position:       e.position,
+    assignmentType: e.assignment_type || 'regular',
+    sortOrder:      e.sort_order,
+    note:           e.note,
+    publishedBy:    publishedBy ?? null,
   }))
 
   const { error: insertErr, count } = await supabase
-    .from('daily_assignments')
+    .from(TABLES.dailyAssignments)
     .insert(rows, { count: 'exact' })
 
   if (insertErr) {
@@ -119,5 +135,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, inserted: count })
+  return NextResponse.json({ ok: true, inserted: count ?? rows.length })
 }

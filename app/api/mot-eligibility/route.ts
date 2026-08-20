@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TABLES } from '@/lib/db/tables'
+// ON_DUTY_TYPES now includes 'light_duty'. A member on light duty is at work
+// and must not be offered or assigned mandatory overtime; the local copy this
+// replaces omitted that type, so light-duty members showed as OT-available.
+import { ON_DUTY_TYPES, leaveExclusionLabel } from '@/lib/schedule/assignment-types'
+import { ELIGIBILITY_COLUMNS } from '@/lib/schedule/daily-assignment'
 
 // SFD Fiscal Year starts July 1
 // July (JS month 6) onward → FY = next calendar year
@@ -7,26 +13,7 @@ function fiscalYear(date: Date): number {
   return date.getUTCMonth() >= 6 ? date.getUTCFullYear() + 1 : date.getUTCFullYear()
 }
 
-const ON_DUTY_TYPES = new Set([
-  'regular',
-  'callback_voluntary',
-  'callback_mandatory',
-  'peak_engine',
-  'trade',
-])
 
-const LEAVE_LABELS: Record<string, string> = {
-  vacation:    'Vacation',
-  sick:        'Sick',
-  FMLA:        'FMLA',
-  OFLA:        'OFLA',
-  PLO:         'PLO',
-  injury:      'Injury Leave',
-  kelly_day:   'Kelly Day',
-  WOC:         'WOC',
-  AIC:         'AIC',
-  BUM:         'BUM',
-}
 
 const MAND_LISTS = [
   { type: 'Captain_mand',               label: 'Captain' },
@@ -52,8 +39,8 @@ export async function GET(req: NextRequest) {
 
   // ── All assignments for this shift date ──────────────────────────────────
   const { data: assignments, error: assignErr } = await supabase
-    .from('daily_assignments')
-    .select('employee_id, assignment_type')
+    .from(TABLES.dailyAssignments)
+    .select(ELIGIBILITY_COLUMNS)
     .eq('shift_date', shiftDate)
 
   if (assignErr) {
@@ -74,7 +61,7 @@ export async function GET(req: NextRequest) {
 
   for (const list of MAND_LISTS) {
     const { data: rows, error: listErr } = await supabase
-      .from('ot_list_positions')
+      .from(TABLES.otListPositions)
       .select(`
         id,
         employee_id,
@@ -100,7 +87,7 @@ export async function GET(req: NextRequest) {
     const members = (rows ?? []).map((m: any) => {
       const assignType = assignMap.get(m.employee_id) ?? null
       const onDuty     = assignType ? ON_DUTY_TYPES.has(assignType) : false
-      const leaveLabel = assignType ? LEAVE_LABELS[assignType] : undefined
+      const leaveLabel = leaveExclusionLabel(assignType)
 
       let eligible = false
       const exclusionLabels: string[] = []
