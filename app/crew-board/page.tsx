@@ -3,8 +3,9 @@ import Link from 'next/link'
 import DateNavClient from './DateNavClient'
 import { TABLES } from '@/lib/db/tables'
 import {
-  ON_DUTY_TYPES,
   INTERN_TYPES,
+  countsForStaffing,
+  isOnDuty,
   assignmentLabel,
 } from '@/lib/schedule/assignment-types'
 import { CREW_BOARD_COLUMNS } from '@/lib/schedule/daily-assignment'
@@ -140,7 +141,7 @@ function getStatusColor(app: AppWithCrew): 'green' | 'amber' | 'red' | 'gray' | 
   if (app.computedUnstaffed) return 'blue'
   if (app.is_reserve) return 'gray'
   if (app.status === 'oos') return 'red'
-  const crewCount = app.crew.filter((a) => ON_DUTY_TYPES.has(a.assignment_type)).length
+  const crewCount = app.crew.filter((a) => countsForStaffing(a.assignment_type)).length
   if (crewCount < app.min_staffing) return 'amber'
   return 'green'
 }
@@ -181,9 +182,11 @@ function StatusDot({ color }: { color: 'green' | 'amber' | 'red' | 'gray' | 'blu
 
 function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }) {
   const color = getStatusColor(app)
-  const onDutyCrew = app.crew.filter((a) => ON_DUTY_TYPES.has(a.assignment_type))
+  // Light-duty members are listed (they are at work and accounted for) but do
+  // not fill a seat, so the roster and the count use different predicates.
+  const onDutyCrew = app.crew.filter((a) => isOnDuty(a.assignment_type))
   const internCrew = app.crew.filter((a) => INTERN_TYPES.has(a.assignment_type))
-  const crewCount = onDutyCrew.length
+  const crewCount = onDutyCrew.filter((a) => countsForStaffing(a.assignment_type)).length
   const short = !app.isAdmin && !app.is_reserve && !app.computedUnstaffed && crewCount < app.min_staffing && app.status !== 'oos'
   const spotsNeeded = Math.max(0, app.min_staffing - crewCount)
 
@@ -250,6 +253,10 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
                   {a.employees?.is_paramedic && (
                     <span className="text-blue-400 text-[9px] font-bold tracking-widest">PM</span>
                   )}
+                  {/* Listed but not counted toward min staffing — see countsForStaffing */}
+                  {!countsForStaffing(a.assignment_type) && (
+                    <span className="text-purple-400/80 text-[9px] font-bold tracking-widest">LD</span>
+                  )}
                   <span className={`text-[9px] font-mono tabular-nums shrink-0 ${full ? 'text-zinc-400' : 'text-amber-400 font-bold'}`}>
                     {timeStr}
                   </span>
@@ -302,7 +309,7 @@ function StationSection({ stationId, stationName, apps }: {
 }) {
   const shortCount = apps.filter((a) => {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
-    const crew = a.crew.filter((c) => ON_DUTY_TYPES.has(c.assignment_type)).length
+    const crew = a.crew.filter((c) => countsForStaffing(c.assignment_type)).length
     return crew < a.min_staffing
   }).length
 
@@ -336,7 +343,7 @@ function BattalionSection({ name, bcApp, stationGroups }: {
   const engines = allApps.filter((a) => a.type === 'engine' && a.status !== 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
   const shortUnits = allApps.filter((a) => {
     if (a.status === 'oos' || a.is_reserve || a.computedUnstaffed || a.isAdmin) return false
-    const crew = a.crew.filter((c) => ON_DUTY_TYPES.has(c.assignment_type)).length
+    const crew = a.crew.filter((c) => countsForStaffing(c.assignment_type)).length
     return crew < a.min_staffing
   })
 
@@ -392,7 +399,7 @@ function PersonnelView({ assignments, debitRows }: {
   debitRows:   DebitRow[]
 }) {
   const onDuty = assignments
-    .filter(a => ON_DUTY_TYPES.has(a.assignment_type) && a.employees)
+    .filter(a => isOnDuty(a.assignment_type) && a.employees)
     .sort((a, b) => {
       const ra = CREW_RANK_ORDER[a.employees?.rank ?? ''] ?? 99
       const rb = CREW_RANK_ORDER[b.employees?.rank ?? ''] ?? 99
@@ -401,7 +408,7 @@ function PersonnelView({ assignments, debitRows }: {
     })
 
   const onLeave = assignments
-    .filter(a => !ON_DUTY_TYPES.has(a.assignment_type) && a.employees)
+    .filter(a => !isOnDuty(a.assignment_type) && a.employees)
     .sort((a, b) => {
       if (a.assignment_type !== b.assignment_type) return a.assignment_type.localeCompare(b.assignment_type)
       return (a.employees?.last_name ?? '').localeCompare(b.employees?.last_name ?? '')
@@ -635,13 +642,14 @@ export default async function StaffingBoard({
   }))
 
   // Summary metrics
-  const onDutyTotal = assignments.filter((a) => ON_DUTY_TYPES.has(a.assignment_type)).length
+  // Gauged against MIN_STAFFING below, so this is a seat count, not a headcount.
+  const onDutyTotal = assignments.filter((a) => countsForStaffing(a.assignment_type)).length
   const MIN_STAFFING = 41
   const staffingOk = onDutyTotal >= MIN_STAFFING
 
   const activeApps = apps.filter((a) => a.status !== 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
   const shortUnits = activeApps.filter((a) => {
-    const crew = a.crew.filter((c) => ON_DUTY_TYPES.has(c.assignment_type)).length
+    const crew = a.crew.filter((c) => countsForStaffing(c.assignment_type)).length
     return crew < a.min_staffing
   })
   const oosUnits = apps.filter((a) => a.status === 'oos' && !a.is_reserve && !a.computedUnstaffed && !a.isAdmin)
@@ -666,7 +674,7 @@ export default async function StaffingBoard({
   const unclaimed = apps.filter((a) => {
     if (!accountedIds.has(a.id)) {
       if (a.isAdmin) {
-        const hasCrew = a.crew.filter((c) => ON_DUTY_TYPES.has(c.assignment_type)).length > 0
+        const hasCrew = a.crew.filter((c) => isOnDuty(c.assignment_type)).length > 0
         return hasCrew || isWeekday
       }
       return true

@@ -13,6 +13,7 @@ import { useState, useCallback, useTransition } from 'react'
 import Link from 'next/link'
 import {
   ON_DUTY_TYPES,
+  countsForStaffing,
   LEAVE_TYPE_OPTIONS,
   ASSIGNABLE_TYPE_OPTIONS,
   assignmentLabel,
@@ -228,7 +229,9 @@ function ApparatusCard({
   const [leaveKey, setLeaveKey] = useState<string | null>(null)
   const [swapKey, setSwapKey]   = useState<string | null>(null)
 
-  const onDutyCount = positions.filter(p => ON_DUTY_TYPES.has(p.assignmentType) && p.employee).length
+  // Light-duty members stay listed but do not fill a seat — see
+  // countsForStaffing in lib/schedule/assignment-types.ts.
+  const onDutyCount = positions.filter(p => countsForStaffing(p.assignmentType) && p.employee).length
   const isShort = onDutyCount < app.min_staffing
 
   const color: 'green' | 'amber' = isShort ? 'amber' : 'green'
@@ -263,7 +266,10 @@ function ApparatusCard({
           <ul className="space-y-1">
             {positions.map(pos => {
               const isLeave   = !ON_DUTY_TYPES.has(pos.assignmentType)
+              // light_duty is on duty and not 'regular', but it carries its own
+              // LD badge below — don't also label it as overtime.
               const isOT      = !isLeave && pos.assignmentType !== 'regular'
+                                && countsForStaffing(pos.assignmentType)
               const original  = app.positions.find(p => p.id === pos.rosterId)?.employee ?? null
 
               return (
@@ -283,6 +289,11 @@ function ApparatusCard({
                   {/* PM badge */}
                   {pos.employee?.is_paramedic && !isLeave && (
                     <span className="text-blue-400 text-[9px] font-bold">PM</span>
+                  )}
+
+                  {/* On duty but not filling a seat (light duty) */}
+                  {!isLeave && pos.employee && !countsForStaffing(pos.assignmentType) && (
+                    <span className="text-purple-400/80 text-[9px] font-bold">LD</span>
                   )}
 
                   {/* Leave / OT badge */}
@@ -352,7 +363,7 @@ function StationSection({ stationId, stationName, apps, posMap, onUpdate, onAddO
 }) {
   const label = stationName.replace(/^Station \d+\s*[-–]?\s*/i, '').trim() || stationName
   const shortCount = apps.filter(a => {
-    const cnt = (posMap.get(a.apparatus_id) ?? []).filter(p => ON_DUTY_TYPES.has(p.assignmentType) && p.employee).length
+    const cnt = (posMap.get(a.apparatus_id) ?? []).filter(p => countsForStaffing(p.assignmentType) && p.employee).length
     return cnt < a.min_staffing
   }).length
 
@@ -400,7 +411,7 @@ function BattalionSection({ battalion, apparatuses, posMap, onUpdate, onAddOT }:
   const engines = apparatuses.filter(a =>
     battalion.stations.includes(a.station_id ?? -1) && a.type === 'engine')
   const shortCount = [...(bcApp ? [bcApp] : []), ...stationGroups.flatMap(s => s.apps)].filter(a => {
-    const cnt = (posMap.get(a.apparatus_id) ?? []).filter(p => ON_DUTY_TYPES.has(p.assignmentType) && p.employee).length
+    const cnt = (posMap.get(a.apparatus_id) ?? []).filter(p => countsForStaffing(p.assignmentType) && p.employee).length
     return cnt < a.min_staffing
   }).length
 
@@ -558,14 +569,14 @@ export default function ScheduleBuilder({
 
   // Computed stats
   const allPositions     = [...posMap.values()].flat()
-  const onDutyCount      = allPositions.filter(p => ON_DUTY_TYPES.has(p.assignmentType) && p.employee).length
+  const onDutyCount      = allPositions.filter(p => countsForStaffing(p.assignmentType) && p.employee).length
   const totalModified    = allPositions.filter(p => p.isModified).length
   const shiftBadgeClass  = SHIFT_BADGE[shiftLetter] ?? 'text-neutral-400 border-neutral-700 bg-neutral-900/20'
 
   // Staffing status across all apparatus
   const shortUnits = apparatuses.filter(app => {
     const cnt = (posMap.get(app.apparatus_id) ?? [])
-      .filter(p => ON_DUTY_TYPES.has(p.assignmentType) && p.employee).length
+      .filter(p => countsForStaffing(p.assignmentType) && p.employee).length
     return cnt < app.min_staffing
   })
   const staffingMet = shortUnits.length === 0

@@ -73,13 +73,15 @@ export const OT_TYPES = new Set<string>([
  * On-duty types that do NOT fill a line seat.
  *
  * A member on light duty is at work — so they are on duty and unavailable for
- * overtime — but they are medically restricted off apparatus. Whether they
- * should still count toward an apparatus minimum-staffing number is a
- * department policy question; today's behavior (they DO count, matching what
- * the crew board has always displayed) is preserved here. Flip this set to
- * include 'light_duty' to change that in one place.
+ * overtime — but they are medically restricted off apparatus and do NOT count
+ * toward an apparatus minimum-staffing number, or toward the department-wide
+ * daily minimum.
+ *
+ * This is the reason isOnDuty() and countsForStaffing() are separate
+ * predicates. Roster displays list these members (they are present and
+ * accounted for); anything compared against a staffing minimum must not.
  */
-export const NON_STAFFING_ON_DUTY_TYPES = new Set<string>([])
+export const NON_STAFFING_ON_DUTY_TYPES = new Set<string>(['light_duty'])
 
 // ── Predicates ────────────────────────────────────────────────────────────────
 
@@ -98,7 +100,13 @@ export function isIntern(assignmentType: string | null | undefined): boolean {
   return assignmentType != null && INTERN_TYPES.has(assignmentType)
 }
 
-/** Does this row fill a seat toward an apparatus minimum-staffing count? */
+/**
+ * Does this row fill a seat toward a minimum-staffing count?
+ *
+ * Use this — never isOnDuty — for any number compared against min_staffing or
+ * the department's daily minimum. Light-duty members are on duty but do not
+ * fill a seat, so the two predicates disagree for them by design.
+ */
 export function countsForStaffing(assignmentType: string | null | undefined): boolean {
   return isOnDuty(assignmentType) && !NON_STAFFING_ON_DUTY_TYPES.has(assignmentType!)
 }
