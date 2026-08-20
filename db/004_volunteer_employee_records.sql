@@ -22,10 +22,12 @@
 -- both tables and every row already in them, which is not worth doing for one
 -- volunteer.
 --
--- So she also gets a synthetic numeric key, 90001. Real IDs in the master run
--- 554-7585, so the synthetic range sits clear of any current or future hire. To
--- use a different number, change it here and the employeeId in
--- lib/schedule/admin-roster.ts together.
+-- So she also gets a numeric key, 9843, for the foreign key alone. Real payroll
+-- IDs in the master currently run 554-7585, so this is clear of every one of
+-- them today. It is not reserved, though: if payroll IDs keep climbing they
+-- would reach it eventually, and the insert below would then fail on a
+-- duplicate key rather than overwrite anyone. To change it, edit it here and
+-- the employeeId in lib/schedule/admin-roster.ts together.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ── Step 1: check the shape before inserting ─────────────────────────────────
@@ -38,11 +40,11 @@ SELECT 'required columns' AS check, column_name, data_type, column_default
    AND column_default IS NULL
  ORDER BY ordinal_position;
 
--- Confirm 90001 is clear and see where the real IDs end.
+-- Confirm 9843 is free and see where the real IDs currently end.
 SELECT 'id range' AS check,
        min(id) AS lowest,
        max(id) AS highest,
-       count(*) FILTER (WHERE id >= 90000) AS already_synthetic
+       count(*) FILTER (WHERE id = 9843) AS id_9843_taken
   FROM employees;
 
 -- An existing civilian to copy the rank value from, so this file does not have
@@ -57,7 +59,7 @@ SELECT 'civilian sample' AS check, id, first_name, last_name, rank
 -- literal; if the sample query above returned nothing, that subquery is null and
 -- this insert will fail rather than write a wrong value — set it explicitly.
 INSERT INTO employees (id, first_name, last_name, rank, badge_number, is_paramedic)
-SELECT 90001,
+SELECT 9843,
        'Peggy',
        'Lowry',
        (SELECT rank FROM employees

@@ -120,9 +120,9 @@ SELECT 'missing_id' AS check, v.id
  WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.id = v.id);
 
 -- 4. Peggy Lowry is a volunteer with no payroll ID and is created by db/004
---    with the synthetic key 90001. Expect one row once that has been run.
+--    with the key 9843. Expect one row once that has been run.
 SELECT 'lowry' AS check, id, first_name, last_name, rank, badge_number
   FROM employees
- WHERE id = 90001 OR (first_name ILIKE 'Peggy' AND last_name ILIKE 'Lowry');
+ WHERE id = 9843 OR (first_name ILIKE 'Peggy' AND last_name ILIKE 'Lowry');
 
 -- The DC of Operations post is deliberately vacant and needs no employee.

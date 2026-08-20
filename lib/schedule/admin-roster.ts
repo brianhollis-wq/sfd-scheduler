@@ -93,10 +93,9 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   // VSA-C6, which is carried as her call sign and badge number — it cannot be
   // her employees.id, because daily_assignments.employee_id is an integer
   // foreign key into that column and will not hold a string. She therefore has
-  // a synthetic numeric key, 90001, created by db/004, which must be run before
-  // she will appear. Real payroll IDs run 554-7585, so the synthetic range
-  // cannot collide with a current or future hire.
-  { apparatusId: 'TR-SA',   position: 'Staff',       callSign: 'VSA-C6', firstName: 'Peggy',   lastName: 'Lowry',       employeeId: 90001, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  // a numeric key, 9843, created by db/004, which must be run before she will
+  // appear.
+  { apparatusId: 'TR-SA',   position: 'Staff',       callSign: 'VSA-C6', firstName: 'Peggy',   lastName: 'Lowry',       employeeId: 9843, days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // ── EMS division ──────────────────────────────────────────────────────────
   { apparatusId: 'EMS-DC',    position: 'DC EMS',          callSign: 'C5', firstName: 'Steve', lastName: 'Boughey', employeeId: 7549, days: MON_FRI, start: [8, 0], end: [17, 0] },
