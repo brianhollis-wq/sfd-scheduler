@@ -64,14 +64,26 @@ async function buildPermanentRosterRows(
 }> {
   const entries = permanentRosterForDate(shiftDate)
 
-  // The PDF wins wherever it says anything. If it staffed a unit, that is the
-  // actual crew for the day — a fill-in covering someone's vacation, say — and
-  // adding the regular person on top would double-book the unit. Likewise a
-  // person the PDF already placed (or marked absent) must not be re-added here.
-  const apparatusInPdf = new Set(pdfRows.map((r) => r.apparatusId))
-  const employeesInPdf = new Set(
-    pdfRows.map((r) => r.employeeId).filter((id): id is number => id != null),
-  )
+  // The PDF wins, but only where the two actually collide in time.
+  //
+  // Comparing by apparatus alone is too blunt. A deputy fire marshal works
+  // 0800-1700 and may also hold the 1700-0800 on-call rotation, which the PDF
+  // prints under "ON Call DFM" against the same DFM-N unit. Those are two
+  // non-overlapping shifts and both belong on the board; suppressing the
+  // daytime row because the unit appears in the PDF would delete a day's work.
+  //
+  // Where the windows do overlap the PDF is authoritative — REACH-1 printing
+  // a callback filling in for an absent regular, for instance — so neither the
+  // absent person nor a duplicate of the person already listed is added.
+  const overlaps = (aStart: string, aEnd: string, bStart: string, bEnd: string) =>
+    Date.parse(aStart) < Date.parse(bEnd) && Date.parse(bStart) < Date.parse(aEnd)
+
+  const pdfWindows = pdfRows.map((r) => ({
+    apparatusId: r.apparatusId,
+    employeeId:  r.employeeId,
+    startDt:     r.startDt,
+    endDt:       r.endDt,
+  }))
 
   const rows: DailyAssignmentRow[] = []
   const unmatched: string[] = []
@@ -85,7 +97,12 @@ async function buildPermanentRosterRows(
       continue
     }
 
-    if (apparatusInPdf.has(entry.apparatusId)) {
+    const entryWindow = windowForEntry(entry, shiftDate)
+
+    if (pdfWindows.some((w) =>
+      w.apparatusId === entry.apparatusId &&
+      overlaps(entryWindow.startDt, entryWindow.endDt, w.startDt, w.endDt),
+    )) {
       supersededByPdf.push(`${entry.apparatusId} (${entry.firstName} ${entry.lastName})`)
       continue
     }
@@ -100,7 +117,10 @@ async function buildPermanentRosterRows(
       employeeId = emp.id
     }
 
-    if (employeesInPdf.has(employeeId)) {
+    if (pdfWindows.some((w) =>
+      w.employeeId === employeeId &&
+      overlaps(entryWindow.startDt, entryWindow.endDt, w.startDt, w.endDt),
+    )) {
       supersededByPdf.push(`${entry.firstName} ${entry.lastName} (${entry.apparatusId})`)
       continue
     }
@@ -115,7 +135,7 @@ async function buildPermanentRosterRows(
       position:       entry.position,
       assignmentType: 'regular',
       sortOrder,
-      window:         windowForEntry(entry, shiftDate),
+      window:         entryWindow,
       isOt:           false,
       publishedBy:    'permanent-roster',
     }))

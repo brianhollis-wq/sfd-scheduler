@@ -1,9 +1,15 @@
 /**
  * Permanent roster — people whose assignment never appears in the daily PDF.
  *
- * The daily schedule PDF covers line personnel. Administration, specialty and
- * REACH-1 staff work fixed weekday schedules and are simply absent from it, so
- * they are expanded from this table whenever a day is committed.
+ * The daily schedule PDF covers line personnel. Administration and specialty
+ * staff work fixed weekday schedules and do not appear in it at all, so they
+ * are expanded from this table whenever a day is committed.
+ *
+ * REACH-1 is different: it DOES print in the PDF. It only looked absent
+ * because the parser could not map the "REACH 1" heading and discarded the
+ * block. Its entries stay here as a fallback for a day the PDF omits it, and
+ * the overlap guard in app/import/actions.ts keeps them from doubling up when
+ * the PDF does carry it.
  *
  * ON-CALL IS NOT HERE. The DFM after-hours rotation (1700–0800 weekdays,
  * 0800–0800 weekends) does appear in the PDF, under an "ON Call DFM" section
