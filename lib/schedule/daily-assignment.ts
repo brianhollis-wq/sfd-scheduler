@@ -124,7 +124,7 @@ export function withGeneratedSortOrder<T>(
  * splitting one across concatenated pieces widens it to `string` and the query
  * loses its typing entirely.
  */
-export const CREW_BOARD_COLUMNS = 'apparatus_id, employee_id, assignment_type, start_dt, end_dt, employees(first_name, last_name, rank, badge_number, is_paramedic, shift_assignment)'
+export const CREW_BOARD_COLUMNS = 'apparatus_id, employee_id, position, assignment_type, start_dt, end_dt, employees(first_name, last_name, rank, badge_number, is_paramedic, shift_assignment)'
 
 /** Columns the schedule builder needs to re-open a published day. */
 export const SCHEDULE_BUILDER_COLUMNS =

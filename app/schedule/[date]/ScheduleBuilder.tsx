@@ -18,6 +18,7 @@ import {
   ASSIGNABLE_TYPE_OPTIONS,
   assignmentLabel,
 } from '@/lib/schedule/assignment-types'
+import { apparatusCountsTowardMinimum } from '@/lib/schedule/apparatus'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -232,7 +233,8 @@ function ApparatusCard({
   // Light-duty members stay listed but do not fill a seat — see
   // countsForStaffing in lib/schedule/assignment-types.ts.
   const onDutyCount = positions.filter(p => countsForStaffing(p.assignmentType) && p.employee).length
-  const isShort = onDutyCount < app.min_staffing
+  const isShort = apparatusCountsTowardMinimum(app.apparatus_id)
+                  && onDutyCount < app.min_staffing
 
   const color: 'green' | 'amber' = isShort ? 'amber' : 'green'
 
@@ -363,6 +365,7 @@ function StationSection({ stationId, stationName, apps, posMap, onUpdate, onAddO
 }) {
   const label = stationName.replace(/^Station \d+\s*[-–]?\s*/i, '').trim() || stationName
   const shortCount = apps.filter(a => {
+    if (!apparatusCountsTowardMinimum(a.apparatus_id)) return false
     const cnt = (posMap.get(a.apparatus_id) ?? []).filter(p => countsForStaffing(p.assignmentType) && p.employee).length
     return cnt < a.min_staffing
   }).length
@@ -411,6 +414,7 @@ function BattalionSection({ battalion, apparatuses, posMap, onUpdate, onAddOT }:
   const engines = apparatuses.filter(a =>
     battalion.stations.includes(a.station_id ?? -1) && a.type === 'engine')
   const shortCount = [...(bcApp ? [bcApp] : []), ...stationGroups.flatMap(s => s.apps)].filter(a => {
+    if (!apparatusCountsTowardMinimum(a.apparatus_id)) return false
     const cnt = (posMap.get(a.apparatus_id) ?? []).filter(p => countsForStaffing(p.assignmentType) && p.employee).length
     return cnt < a.min_staffing
   }).length
@@ -569,12 +573,24 @@ export default function ScheduleBuilder({
 
   // Computed stats
   const allPositions     = [...posMap.values()].flat()
-  const onDutyCount      = allPositions.filter(p => countsForStaffing(p.assignmentType) && p.employee).length
+  // Must match the crew board's "On Duty" tile exactly: seat-filling assignment
+  // types, on an active apparatus, counted by distinct employee so one body
+  // never counts twice.
+  const onDutyCount      = new Set(
+    allPositions
+      .filter(p =>
+        countsForStaffing(p.assignmentType) &&
+        p.employee &&
+        apparatusCountsTowardMinimum(p.apparatusId),
+      )
+      .map(p => p.employee!.id),
+  ).size
   const totalModified    = allPositions.filter(p => p.isModified).length
   const shiftBadgeClass  = SHIFT_BADGE[shiftLetter] ?? 'text-neutral-400 border-neutral-700 bg-neutral-900/20'
 
   // Staffing status across all apparatus
   const shortUnits = apparatuses.filter(app => {
+    if (!apparatusCountsTowardMinimum(app.apparatus_id)) return false
     const cnt = (posMap.get(app.apparatus_id) ?? [])
       .filter(p => countsForStaffing(p.assignmentType) && p.employee).length
     return cnt < app.min_staffing

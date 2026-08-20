@@ -12,8 +12,11 @@ import { TABLES } from '@/lib/db/tables'
 import {
   buildDailyAssignmentRow,
   withGeneratedSortOrder,
+  SORT_ORDER_STEP,
+  type DailyAssignmentRow,
 } from '@/lib/schedule/daily-assignment'
-import { standardShiftWindow } from '@/lib/schedule/shift-window'
+import { permanentRosterForDate, windowForEntry } from '@/lib/schedule/admin-roster'
+import { findEmployee, type AdminClient } from '@/lib/employees/find'
 
 // ────────────────────────────────────────────────────────────────
 // Types shared with the client
@@ -28,28 +31,119 @@ export interface PreviewRow extends ParsedRow {
 export interface CommitResult {
   inserted: number
   skipped:  number
+  /** Permanent-roster people who could not be matched in the employees table. */
+  unmatchedRoster?: string[]
+  /** Permanent-roster apparatus missing from the apparatus table. */
+  missingApparatus?: string[]
   error?:   string
 }
 
 // ────────────────────────────────────────────────────────────────
-// REACH-1 permanent crew (always Tue–Fri, never in the PDF)
+// Permanent roster expansion
 // ────────────────────────────────────────────────────────────────
 
-const REACH1_APPARATUS_ID = 'REACH-1'
+/**
+ * Build daily_assignments rows for everyone whose assignment never appears in
+ * the PDF — administration, specialty and REACH-1 crew. See
+ * lib/schedule/admin-roster.ts.
+ *
+ * Entries whose apparatus is absent from the apparatus table are skipped, and
+ * entries whose person cannot be matched in the employees table are reported
+ * so they surface in the import result rather than vanishing.
+ */
+async function buildPermanentRosterRows(
+  supabase: AdminClient,
+  shiftDate: string,
+  validApparatus: Set<string>,
+  pdfRows: PreviewRow[],
+): Promise<{
+  rows: DailyAssignmentRow[]
+  unmatched: string[]
+  skippedApparatus: string[]
+  supersededByPdf: string[]
+}> {
+  const entries = permanentRosterForDate(shiftDate)
 
-const REACH1_PERMANENT_CREW: Array<{
-  employee_id:     number
-  assignment_type: string
-}> = [
-  { employee_id: 2830, assignment_type: 'regular' }, // Scott Alt
-  { employee_id: 7356, assignment_type: 'regular' }, // Amanda Palmer
-]
+  // The PDF wins, but only where the two actually collide in time.
+  //
+  // Comparing by apparatus alone is too blunt. A deputy fire marshal works
+  // 0800-1700 and may also hold the 1700-0800 on-call rotation, which the PDF
+  // prints under "ON Call DFM" against the same DFM-N unit. Those are two
+  // non-overlapping shifts and both belong on the board; suppressing the
+  // daytime row because the unit appears in the PDF would delete a day's work.
+  //
+  // Where the windows do overlap the PDF is authoritative — REACH-1 printing
+  // a callback filling in for an absent regular, for instance — so neither the
+  // absent person nor a duplicate of the person already listed is added.
+  const overlaps = (aStart: string, aEnd: string, bStart: string, bEnd: string) =>
+    Date.parse(aStart) < Date.parse(bEnd) && Date.parse(bStart) < Date.parse(aEnd)
 
-/** Returns true if a YYYY-MM-DD date string falls on Tuesday–Friday UTC. */
-function isTueToFri(dateStr: string): boolean {
-  // Parse at noon UTC to avoid any DST / timezone shifts near midnight
-  const day = new Date(dateStr + 'T12:00:00Z').getUTCDay() // 0=Sun … 6=Sat
-  return day >= 2 && day <= 5
+  const pdfWindows = pdfRows.map((r) => ({
+    apparatusId: r.apparatusId,
+    employeeId:  r.employeeId,
+    startDt:     r.startDt,
+    endDt:       r.endDt,
+  }))
+
+  const rows: DailyAssignmentRow[] = []
+  const unmatched: string[] = []
+  const skippedApparatus: string[] = []
+  const supersededByPdf: string[] = []
+  const sortOrderByApparatus = new Map<string, number>()
+
+  for (const entry of entries) {
+    if (!validApparatus.has(entry.apparatusId)) {
+      if (!skippedApparatus.includes(entry.apparatusId)) skippedApparatus.push(entry.apparatusId)
+      continue
+    }
+
+    const entryWindow = windowForEntry(entry, shiftDate)
+
+    if (pdfWindows.some((w) =>
+      w.apparatusId === entry.apparatusId &&
+      overlaps(entryWindow.startDt, entryWindow.endDt, w.startDt, w.endDt),
+    )) {
+      supersededByPdf.push(`${entry.apparatusId} (${entry.firstName} ${entry.lastName})`)
+      continue
+    }
+
+    // A vacant post is written with no employee so the seat still shows on the
+    // board. Resolving a blank name would only ever fail.
+    let employeeId = entry.employeeId ?? null
+    if (employeeId == null && !entry.vacant) {
+      const emp = await findEmployee(supabase, entry.firstName, entry.lastName)
+      if (!emp) {
+        unmatched.push(`${entry.firstName} ${entry.lastName} (${entry.apparatusId})`)
+        continue
+      }
+      employeeId = emp.id
+    }
+
+    if (employeeId != null && pdfWindows.some((w) =>
+      w.employeeId === employeeId &&
+      overlaps(entryWindow.startDt, entryWindow.endDt, w.startDt, w.endDt),
+    )) {
+      supersededByPdf.push(`${entry.firstName} ${entry.lastName} (${entry.apparatusId})`)
+      continue
+    }
+
+    const sortOrder = sortOrderByApparatus.get(entry.apparatusId) ?? 0
+    sortOrderByApparatus.set(entry.apparatusId, sortOrder + SORT_ORDER_STEP)
+
+    rows.push(buildDailyAssignmentRow({
+      shiftDate,
+      apparatusId:    entry.apparatusId,
+      employeeId,
+      position:       entry.position,
+      assignmentType: 'regular',
+      sortOrder,
+      window:         entryWindow,
+      isOt:           false,
+      publishedBy:    'permanent-roster',
+    }))
+  }
+
+  return { rows, unmatched, skippedApparatus, supersededByPdf }
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -81,8 +175,6 @@ export async function commitScheduleAction(
     const toInsert = matched.filter((r) => validApparatus.has(r.apparatusId))
     const skipped  = rows.length - toInsert.length
 
-    if (toInsert.length === 0 && !isTueToFri(shiftDate)) return { inserted: 0, skipped }
-
     let insertedCount = 0
 
     if (toInsert.length > 0) {
@@ -112,28 +204,31 @@ export async function commitScheduleAction(
       insertedCount = toInsert.length
     }
 
-    // Auto-populate REACH-1 on Tue–Fri with permanent crew (Scott Alt & Amanda Palmer).
-    // These employees never appear in the daily PDF, so we always upsert them here.
-    if (isTueToFri(shiftDate) && validApparatus.has(REACH1_APPARATUS_ID)) {
-      const reach1Rows = REACH1_PERMANENT_CREW.map((c, i) => buildDailyAssignmentRow({
-        shiftDate,
-        apparatusId:    REACH1_APPARATUS_ID,
-        employeeId:     c.employee_id,
-        assignmentType: c.assignment_type,
-        sortOrder:      i * 10,
-        window:         standardShiftWindow(shiftDate),
-        publishedBy:    'pdf-import',
-      }))
+    // Administration, specialty and REACH-1 staff are never in the PDF.
+    const { rows: rosterRows, unmatched, skippedApparatus, supersededByPdf } =
+      await buildPermanentRosterRows(supabase, shiftDate, validApparatus, toInsert)
 
-      const { error: r1Err } = await supabase
-        .from(TABLES.dailyAssignments)
-        .insert(reach1Rows)
-      if (r1Err) throw r1Err
-
-      insertedCount += reach1Rows.length
+    if (supersededByPdf.length > 0) {
+      console.info(
+        `[import] ${shiftDate}: permanent-roster entries superseded by the PDF: ${supersededByPdf.join(', ')}`,
+      )
     }
 
-    return { inserted: insertedCount, skipped }
+    if (rosterRows.length > 0) {
+      const { error: rosterErr } = await supabase
+        .from(TABLES.dailyAssignments)
+        .insert(rosterRows)
+      if (rosterErr) throw rosterErr
+
+      insertedCount += rosterRows.length
+    }
+
+    return {
+      inserted: insertedCount,
+      skipped,
+      ...(unmatched.length        > 0 ? { unmatchedRoster:  unmatched }        : {}),
+      ...(skippedApparatus.length > 0 ? { missingApparatus: skippedApparatus } : {}),
+    }
   } catch (err: unknown) {
     // Supabase errors are plain objects with a `message` field, not Error instances
     let msg: string

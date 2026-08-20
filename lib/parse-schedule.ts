@@ -144,6 +144,12 @@ export function mapApparatusName(raw: string): string | null {
   const harbor = n.match(/^HARBOR\s+(\d+)$/i)
   if (harbor) return `HB-${harbor[1]}`
 
+  // "REACH N" → REACH-N. The PDF prints this one with a space, and without
+  // this rule the whole REACH block failed to map and was discarded with an
+  // "orphan staffing block" warning — silently dropping its crew every day.
+  const reach = n.match(/^REACH\s+(\d+)$/i)
+  if (reach) return `REACH-${reach[1]}`
+
   // Already "REACH-N", "DECON-N", "HM-N", "A-N" etc.
   if (/^(REACH|DECON|HM|A|BR|TR|HR|F|USAR)-[\dA-Z]+$/i.test(n)) return n.toUpperCase()
 
@@ -210,6 +216,9 @@ const CONTINUATION_LINE_RE = /^ {2,}(?!([ROMDTSEVL])\s{2,})/
  */
 const INLINE_TIME_RANGE_RE = /\b(\d{2}):(\d{2})\s*[-–]\s*(\d{2}):(\d{2})\b/
 
+/** A section time range occupying a whole line, e.g. "17:00 - 08:00". */
+const SECTION_TIME_RANGE_RE = /^(\d{2}):(\d{2})\s*[-–]\s*(\d{2}):(\d{2})$/
+
 /**
  * Parse first/last name from the raw name field, stripping:
  *   - Parenthetical info: "(FM-3)", "(Trade Time [TR])"
@@ -222,6 +231,16 @@ export function parseName(raw: string): { firstName: string; lastName: string } 
     .replace(/\d{3}[\-\s]?\d{3}[\-\s]?\d{4}/g, '')   // strip phone numbers
     .replace(/\b\d{2}:\d{2}\s*[-–]\s*\d{2}:\d{2}\b/g, '') // strip inline time ranges (07:00-17:00)
     .replace(/[*†‡#✓✗✘☑☒]+/g, '')                    // strip annotation marks (asterisks, etc.)
+    // Drop leftover numeric debris. A phone number split across a line wrap
+    // leaves a fragment like "503-932-" that the full-phone pattern above
+    // cannot match, and it was ending up inside the surname — "Robert Johnson
+    // 503-932-" never resolves against the employees table, so that member's
+    // shift was silently dropped. Names carry no digit-only tokens, so
+    // removing any token that has digits and no letters is safe; "3rd" and
+    // similar keep their letters and survive.
+    .split(/\s+/)
+    .filter((token) => !(/\d/.test(token) && !/[A-Za-z]/.test(token)))
+    .join(' ')
     .replace(/\s+/g, ' ')
     .trim()
 
@@ -377,6 +396,8 @@ export function parseScheduleText(text: string): ParseResult {
   let inStaffing = false
   let currentApparatusId: string | null = null
   let currentIsHalfShift = false
+  /** Time range printed under the current "Staffing level:" line, if any. */
+  let currentSectionRange: { startHH: number; startMM: number; endHH: number; endMM: number } | null = null
   let currentIsLightDuty = false
 
   const warn = (i: number, line: string, reason: string) =>
@@ -401,12 +422,25 @@ export function parseScheduleText(text: string): ParseResult {
         continue
       }
 
-      // Determine if half-shift from the next non-empty line (the time range)
+      // Capture the section's own time range from the next non-empty line.
       let j = i + 1
       while (j < lines.length && !lines[j].trim()) j++
       const timeRange = j < lines.length ? lines[j].trim() : ''
 
       currentIsHalfShift = /08:00\s*-\s*18:00/.test(timeRange)
+
+      // Every block prints its hours; only 08:00-08:00 is a full shift. Reading
+      // the range means a unit that does not run 24 hours gets its real window
+      // instead of a default one — REACH-1 at 08:00-18:00, and the DFM on-call
+      // block at 17:00-08:00, which used to be stored as a 24-hour day starting
+      // at 08:00. Inline per-employee ranges still take precedence over this.
+      const sectionRange = SECTION_TIME_RANGE_RE.exec(timeRange)
+      currentSectionRange = sectionRange
+        ? {
+            startHH: parseInt(sectionRange[1]), startMM: parseInt(sectionRange[2]),
+            endHH:   parseInt(sectionRange[3]), endMM:   parseInt(sectionRange[4]),
+          }
+        : null
 
       // Determine which apparatus this block belongs to — must happen before light duty check
 
@@ -517,11 +551,18 @@ export function parseScheduleText(text: string): ParseResult {
         ? 'light_duty'
         : (TYPE_MAP[typeCode] ?? 'regular')
       const isOt = OT_CODES.has(typeCode)
-      // Priority: light_duty fixed window > inline PDF range > default shift timestamps
+      // Priority: light-duty fixed window > inline per-employee range >
+      // the section's own printed range > the default 24-hour shift.
+      const effectiveRange = inlineRange ?? currentSectionRange
+      const isFullShiftRange =
+        effectiveRange != null &&
+        effectiveRange.startHH === 8 && effectiveRange.startMM === 0 &&
+        effectiveRange.endHH === 8   && effectiveRange.endMM === 0
+
       const timestamps = currentIsLightDuty
         ? lightDutyShiftWindow(shiftDate)
-        : inlineRange
-          ? rangeShiftWindow(shiftDate, inlineRange.startHH, inlineRange.startMM, inlineRange.endHH, inlineRange.endMM)
+        : effectiveRange && !isFullShiftRange
+          ? rangeShiftWindow(shiftDate, effectiveRange.startHH, effectiveRange.startMM, effectiveRange.endHH, effectiveRange.endMM)
           : standardShiftWindow(shiftDate, currentIsHalfShift)
 
       rows.push({
