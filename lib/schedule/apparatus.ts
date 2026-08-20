@@ -30,6 +30,8 @@ export const ADMIN_UNITS = new Set<string>([
   'EMS-DC', 'EMS-COORD', 'EMS-TRN', 'EMS-PDA1', 'EMS-PDA2', 'EMS-BILL', 'EMS-SA',
   // Training division
   'TR-DC', 'TR-CPT1', 'TR-CPT2', 'TR-AO', 'TR-SA',
+  // Logistics division
+  'LOG-ANL', 'LOG-FB', 'LOG-EB',
   // Administration — Office of the Fire Chief, Emergency Operations,
   // Business Operations, Emergency Management
   'C-1', 'C-2', 'C-3', 'C-4', 'DC-OPS', 'EM-1',
@@ -98,6 +100,7 @@ export const BOARD_SECTIONS: readonly BoardSection[] = [
   { title: 'Community Risk Reduction', unitIds: ['DFM-1', 'DFM-2', 'DFM-3', 'DFM-4', 'DFM-5', 'DFM-6', 'INSP-1', 'INSP-2'] },
   { title: 'Training Division',        unitIds: ['TR-DC', 'TR-CPT1', 'TR-CPT2', 'TR-AO', 'TR-SA'] },
   { title: 'EMS',                      unitIds: ['EMS-DC', 'EMS-COORD', 'EMS-TRN', 'EMS-PDA1', 'EMS-PDA2', 'EMS-BILL', 'EMS-SA'] },
+  { title: 'Logistics',                unitIds: ['LOG-ANL', 'LOG-FB', 'LOG-EB'] },
   {
     title: 'Administration',
     groups: [

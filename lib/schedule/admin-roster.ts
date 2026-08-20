@@ -83,10 +83,13 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   { apparatusId: 'TR-CPT1', position: 'TO2',         firstName: 'Scott',   lastName: 'Miller',      employeeId: 1733, days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'TR-CPT2', position: 'TO3',         firstName: 'Paul',    lastName: 'Bridgehouse', employeeId: 872, days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'TR-AO',   position: 'TO4',         firstName: 'Matthew', lastName: 'Miller',      employeeId: 3580, days: TUE_FRI, start: [7, 0], end: [17, 0] },
-  // Peggy Lowry is one of only two people in the personnel master with no
-  // employee ID, so she is the one post still resolved by name. If she has no
-  // employees row either, the import screen reports her as unmatched rather
-  // than committing a Training Division that is quietly one person short.
+  // Peggy Lowry is a volunteer, so she has no employee ID — she and the
+  // contract Medical Director are the only two people in the personnel master
+  // without one. She is therefore the single post still resolved by name, and
+  // she will stay unmatched until an employees record exists for her, since
+  // daily_assignments identifies people only by that foreign key. The import
+  // screen reports her rather than committing a Training Division that is
+  // quietly one person short. See db/004.
   { apparatusId: 'TR-SA',   position: 'Staff',       firstName: 'Peggy',   lastName: 'Lowry',       days: MON_FRI, start: [8, 0], end: [17, 0] },
 
   // ── EMS division ──────────────────────────────────────────────────────────
@@ -97,6 +100,13 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   { apparatusId: 'EMS-PDA2',  position: 'Paramedic Data Analyst', firstName: 'Emily',  lastName: 'Rodriguez',  employeeId: 7338, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'EMS-BILL',  position: 'Billing Specialist',     firstName: 'Briley', lastName: 'Davis',      employeeId: 7455, days: MON_FRI, start: [8, 0], end: [17, 0] },
   { apparatusId: 'EMS-SA',    position: 'Staff Assistant',        firstName: 'Kelly',  lastName: 'Richardson', employeeId: 6993, days: MON_FRI, start: [8, 0], end: [17, 0] },
+
+  // ── Logistics division ────────────────────────────────────────────────────
+  // Kelsey Hutchinson is no relation to Joe Hutchinson on EM-1, and Amanda
+  // Martinez is not Amanda Palmer on REACH-1 — both pairs are pinned by ID.
+  { apparatusId: 'LOG-ANL', position: 'Logistics Mgmt Analyst', firstName: 'Kelsey', lastName: 'Hutchinson', employeeId: 5467, days: MON_FRI, start: [8, 0], end: [17, 0] },
+  { apparatusId: 'LOG-FB',  position: 'Fire Buyer',             firstName: 'Amanda', lastName: 'Martinez',   employeeId: 7348, days: MON_THU, start: [7, 0], end: [17, 0] },
+  { apparatusId: 'LOG-EB',  position: 'EMS Buyer',              firstName: 'Matt',   lastName: 'Kinney',     employeeId: 7340, days: TUE_FRI, start: [7, 0], end: [17, 0] },
 
   // ── Administration — all weekdays 0800–1700 ───────────────────────────────
   // Office of the Fire Chief

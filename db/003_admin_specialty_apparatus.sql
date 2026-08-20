@@ -58,6 +58,10 @@ SELECT v.id,
           ('EMS-PDA2', 'Paramedic Data Analyst 2'),
           ('EMS-BILL', 'Billing Specialist'),
           ('EMS-SA',   'EMS Staff Assistant'),
+          -- Logistics division
+          ('LOG-ANL',  'Logistics Management Analyst'),
+          ('LOG-FB',   'Fire Buyer'),
+          ('LOG-EB',   'EMS Buyer'),
           -- Office of the Fire Chief
           ('C-1',      'Fire Chief'),
           ('FCO-1',    'Fire Chief''s Office Staff 1'),
@@ -82,7 +86,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 2. Confirm every pinned employee ID resolves. The roster no longer matches
 --    people by name — each filled post carries an ID from the personnel master
---    list — so this is an exact check rather than a fuzzy one. Expect 30 rows.
+--    list — so this is an exact check rather than a fuzzy one. Expect 33 rows.
 --    A missing ID means that row will fail its foreign key at import.
 SELECT 'employee' AS check, id, first_name, last_name, rank
   FROM employees
@@ -91,9 +95,14 @@ SELECT 'employee' AS check, id, first_name, last_name, rank
      7490, 7491,                                  -- inspectors
      7536, 1733,  872, 3580,                      -- training division
      7549, 2587, 7397, 7335, 7338, 7455, 6993,    -- EMS division
-     7184, 2459, 6400,                            -- Office of the Fire Chief
+     7184, 2459, 6400,                            -- Logistics division
+          ('LOG-ANL',  'Logistics Management Analyst'),
+          ('LOG-FB',   'Fire Buyer'),
+          ('LOG-EB',   'EMS Buyer'),
+          -- Office of the Fire Chief
       919, 1120,                                  -- Emergency Operations Division
      3375, 6936, 1948, 6399,                      -- Business Operations Division
+     5467, 7348, 7340,                            -- Logistics division
      2830, 7356                                   -- REACH-1
    )
  ORDER BY id;
@@ -105,6 +114,7 @@ SELECT 'missing_id' AS check, v.id
           (7536),(1733),(872),(3580),
           (7549),(2587),(7397),(7335),(7338),(7455),(6993),
           (7184),(2459),(6400),(919),(1120),(3375),(6936),(1948),(6399),
+          (5467),(7348),(7340),
           (2830),(7356)
        ) AS v(id)
  WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.id = v.id);
