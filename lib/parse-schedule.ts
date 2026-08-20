@@ -244,12 +244,31 @@ export function parseName(raw: string): { firstName: string; lastName: string } 
     .replace(/\s+/g, ' ')
     .trim()
 
-  if (!s) return null
-  const idx = s.indexOf(' ')
-  if (idx < 0) return { firstName: s, lastName: '' }
+  // Drop trailing status codes.
+  //
+  // A line whose rank field landed on a different PDF text item is captured to
+  // the end by EMPLOYEE_LINE_RE_NO_RANK, so the codes that the rank-matched
+  // path truncates away stay attached to the surname:
+  //
+  //   L Jakob Sessa   FF/P   08:00-17:00 P        -> name stops at the rank
+  //   T Steven Weaver        08:00-18:00 P CNFLG  -> "Steven Weaver P CNFLG"
+  //
+  // Weaver's light-duty rows were dropped on both of his windows for exactly
+  // this reason. Codes are written in full caps and names are not, so trailing
+  // all-caps tokens come off — but never below a first and last name, because
+  // an all-caps token can be a name: TJ is somebody's first name, not a code.
+  const tokens = s.split(' ')
+  while (tokens.length > 2 && /^[A-Z][A-Z/.-]*$/.test(tokens[tokens.length - 1])) {
+    tokens.pop()
+  }
+  const name = tokens.join(' ')
+
+  if (!name) return null
+  const idx = name.indexOf(' ')
+  if (idx < 0) return { firstName: name, lastName: '' }
   return {
-    firstName: s.slice(0, idx).trim(),
-    lastName: s.slice(idx + 1).trim(),
+    firstName: name.slice(0, idx).trim(),
+    lastName: name.slice(idx + 1).trim(),
   }
 }
 
@@ -551,8 +570,22 @@ export function parseScheduleText(text: string): ParseResult {
         ? 'light_duty'
         : (TYPE_MAP[typeCode] ?? 'regular')
       const isOt = OT_CODES.has(typeCode)
-      // Priority: light-duty fixed window > inline per-employee range >
+      // Priority: inline per-employee range > light-duty's fixed window >
       // the section's own printed range > the default 24-hour shift.
+      //
+      // Light duty used to take a fixed 07:00-17:00 because the block carried
+      // no hours. It does carry them, per person, and they differ:
+      //
+      //   L Jordan Fanning FF/P 08:00-17:00 H P
+      //   T Steven Weaver       08:00-18:00 P CNFLG
+      //   T Steven Weaver       06:00-08:00 P CNFLG
+      //
+      // Collapsing all of those to one window put people on the board at hours
+      // they were not there, which defeats the reason light duty is listed at
+      // all. The printed range wins where there is one; the fixed window stays
+      // as the fallback for a line that prints none. The section's own range is
+      // not used for light duty — the block prints the shift's 08:00-08:00,
+      // which is never a light-duty day.
       const effectiveRange = inlineRange ?? currentSectionRange
       const isFullShiftRange =
         effectiveRange != null &&
@@ -560,7 +593,9 @@ export function parseScheduleText(text: string): ParseResult {
         effectiveRange.endHH === 8   && effectiveRange.endMM === 0
 
       const timestamps = currentIsLightDuty
-        ? lightDutyShiftWindow(shiftDate)
+        ? (inlineRange
+            ? rangeShiftWindow(shiftDate, inlineRange.startHH, inlineRange.startMM, inlineRange.endHH, inlineRange.endMM)
+            : lightDutyShiftWindow(shiftDate))
         : effectiveRange && !isFullShiftRange
           ? rangeShiftWindow(shiftDate, effectiveRange.startHH, effectiveRange.startMM, effectiveRange.endHH, effectiveRange.endMM)
           : standardShiftWindow(shiftDate, currentIsHalfShift)
