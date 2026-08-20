@@ -9,6 +9,7 @@ import {
   assignmentLabel,
 } from '@/lib/schedule/assignment-types'
 import { CREW_BOARD_COLUMNS } from '@/lib/schedule/daily-assignment'
+import { ADMIN_UNITS, apparatusCountsTowardMinimum } from '@/lib/schedule/apparatus'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,12 +60,9 @@ const UNSTAFFED_UNITS = new Set([
   'HR-4', 'F-6', 'F-16', 'USAR-TRK', 'T-7', 'HB-7', 'BR-7',
 ])
 
-const ADMIN_UNITS = new Set([
-  'DFM-1', 'DFM-2', 'DFM-3', 'DFM-4', 'DFM-5',
-  'EMS-DC', 'EMS-COORD', 'EMS-TRN',
-  'TR-DC', 'TR-CPT1', 'TR-CPT2', 'TR-AO',
-  'LD',
-])
+// Administration and specialty units — shared with the schedule builder, which
+// must exclude the same units from its daily-minimum count. See
+// lib/schedule/apparatus.ts.
 
 const RESERVE_UNITS = new Set([
   'E-13', 'E-17', 'E-15', 'E-14', 'BC-3', 'E-16', 'TR-11',
@@ -642,8 +640,14 @@ export default async function StaffingBoard({
   }))
 
   // Summary metrics
-  // Gauged against MIN_STAFFING below, so this is a seat count, not a headcount.
-  const onDutyTotal = assignments.filter((a) => countsForStaffing(a.assignment_type)).length
+  // Gauged against MIN_STAFFING below, so this is a line-seat count, not a
+  // headcount: it excludes both assignment types that do not fill a seat
+  // (leave, light duty) and whole units that are not line units (DFM, EMS,
+  // training, LD). Counting administration and specialty bodies here would let
+  // the board read "41 ✓" while apparatus sat short.
+  const onDutyTotal = assignments.filter((a) =>
+    countsForStaffing(a.assignment_type) && apparatusCountsTowardMinimum(a.apparatus_id),
+  ).length
   const MIN_STAFFING = 41
   const staffingOk = onDutyTotal >= MIN_STAFFING
 
