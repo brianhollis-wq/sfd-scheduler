@@ -164,7 +164,7 @@ type PageState =
   | { phase: 'preview'; shiftDate: string; rows: PreviewRow[]; warnings: ParseWarning[]; debugLines?: string[] }
   | { phase: 'committing' }
   | { phase: 'done'; inserted: number; skipped: number; shiftDate: string;
-      unmatchedRoster?: string[]; missingApparatus?: string[] }
+      unmatchedPdf?: string[]; unmatchedRoster?: string[]; missingApparatus?: string[] }
   | { phase: 'error'; message: string }
 
 export default function ImportPage() {
@@ -237,6 +237,7 @@ export default function ImportPage() {
           inserted: result.inserted,
           skipped: result.skipped,
           shiftDate,
+          unmatchedPdf: result.unmatchedPdf,
           unmatchedRoster: result.unmatchedRoster,
           missingApparatus: result.missingApparatus,
         })
@@ -418,6 +419,23 @@ export default function ImportPage() {
                 </span>
               )}
             </p>
+            {/* Names the PDF listed that no employee record matched. The row is
+                dropped, so the person is simply absent from the board — name
+                them here rather than leaving it to the skipped count. */}
+            {state.unmatchedPdf?.length ? (
+              <div className="mx-auto max-w-md text-left rounded-lg border border-amber-700/40 bg-amber-950/30 px-4 py-3">
+                <p className="text-amber-300 text-xs font-semibold uppercase tracking-wider">
+                  On the schedule but not in employees
+                </p>
+                <ul className="text-amber-200/80 text-xs mt-1 space-y-0.5">
+                  {state.unmatchedPdf.map(n => <li key={n}>· {n}</li>)}
+                </ul>
+                <p className="text-amber-200/50 text-[11px] pt-2 mt-2 border-t border-amber-800/30">
+                  These were not committed and will not appear on the board. Add the
+                  spelling the schedule uses to name_aliases, or fix the employee record.
+                </p>
+              </div>
+            ) : null}
             {/* Permanent-roster problems. These people and units are never in
                 the PDF, so nothing else would reveal that they went missing. */}
             {(state.unmatchedRoster?.length || state.missingApparatus?.length) ? (

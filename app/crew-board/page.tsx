@@ -133,6 +133,21 @@ function isFullShift(start: string | null, end: string | null): boolean {
   return Math.abs(diffHrs - 24) < 0.1
 }
 
+/**
+ * Does this unit run shorter hours than the shift?
+ *
+ * The peak medics run 08:00-18:00 while the rest of the fleet runs the full
+ * 24, so their hours are worth printing on the card. A unit that runs the
+ * whole shift needs no label.
+ */
+function isPartialWindow(w: { start: number; end: number } | null): w is { start: number; end: number } {
+  return w != null && (w.end - w.start) / 36e5 < 23.9
+}
+
+function fmtWindow(w: { start: number; end: number }): string {
+  return `${fmtTime(new Date(w.start).toISOString())}\u2013${fmtTime(new Date(w.end).toISOString())}`
+}
+
 function crewSort(a: Assignment, b: Assignment): number {
   const ra = rankSortValue(a.employees?.rank)
   const rb = rankSortValue(b.employees?.rank)
@@ -164,6 +179,9 @@ function getStatusColor(app: AppWithCrew, at: number): 'green' | 'amber' | 'red'
   // Same seat-based assessment the card uses, so the dot cannot read green
   // over an unfilled captain's seat.
   const staffing = assessStaffing(app.type, crewForStaffing(app), app.min_staffing, at)
+  // A peak medic outside its hours is not running, so it is neither green nor
+  // amber — it is the same neutral as any other unit that is not in service.
+  if (staffing.outOfService) return 'gray'
   return staffing.isShort ? 'amber' : 'green'
 }
 
@@ -210,6 +228,11 @@ function ApparatusCard({ app, compact, at }: { app: AppWithCrew; compact?: boole
     ? temporaryAssignmentLabel(app.id)
     : null
   const short = !app.isAdmin && !app.is_reserve && !app.computedUnstaffed && !deployedLabel && staffing.isShort && app.status !== 'oos'
+  // Hours worth printing (peak medics, REACH), and whether the unit has gone
+  // off for the day. Outside its hours assessStaffing already reports no open
+  // seats — the card must not print a headcount against them either.
+  const hoursLabel = isPartialWindow(staffing.serviceWindow) ? fmtWindow(staffing.serviceWindow) : null
+  const offNow = staffing.outOfService
   // Seats nobody aboard can fill, then any further shortfall against the plain
   // minimum for units with no defined composition.
   const openSeatLabels = staffing.openSeats
@@ -244,6 +267,15 @@ function ApparatusCard({ app, compact, at }: { app: AppWithCrew; compact?: boole
               {deployedLabel}
             </span>
           )}
+          {hoursLabel && (
+            <span className={`text-[9px] font-mono font-bold rounded px-1.5 py-0.5 tracking-widest tabular-nums ${
+              offNow
+                ? 'text-zinc-500 bg-zinc-800/40 border border-zinc-700/40'
+                : 'text-sky-300 bg-sky-900/30 border border-sky-700/40'
+            }`}>
+              {hoursLabel}
+            </span>
+          )}
           {app.fleet_number && (
             <span className="text-zinc-400 font-mono text-xs">#{app.fleet_number}</span>
           )}
@@ -251,12 +283,23 @@ function ApparatusCard({ app, compact, at }: { app: AppWithCrew; compact?: boole
             <span className="text-[9px] font-mono font-bold text-zinc-500 tracking-widest">RSV</span>
           )}
         </div>
-        <span className={`text-xs font-mono font-bold tabular-nums ${short ? 'text-amber-400' : compact ? 'text-zinc-400' : 'text-green-400'}`}>
-          {crewCount}/{app.min_staffing}
-        </span>
+        {offNow ? (
+          <span className="text-[10px] font-mono font-bold tracking-widest text-zinc-500">OFF</span>
+        ) : (
+          <span className={`text-xs font-mono font-bold tabular-nums ${short ? 'text-amber-400' : compact ? 'text-zinc-400' : 'text-green-400'}`}>
+            {crewCount}/{app.min_staffing}
+          </span>
+        )}
       </div>
 
       <div className="px-3 py-2 min-h-[52px]">
+        {/* The crew stays listed for accountability — the unit is off for the
+            day, not unaccounted for. */}
+        {offNow && hoursLabel && (
+          <div className="text-zinc-500 text-[10px] font-mono italic mb-1 tracking-wide">
+            NOT IN SERVICE — RUNS {hoursLabel}
+          </div>
+        )}
         {app.isAdmin && app.crew.length === 0 ? (
           <div className="text-zinc-600 text-xs font-mono italic">ADMIN — 40 HR STAFF</div>
         ) : app.computedUnstaffed && onDutyCrew.length === 0 ? (

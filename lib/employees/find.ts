@@ -40,7 +40,7 @@ export const NICKNAME_MAP: Record<string, string[]> = {
   Steve: ['Steven', 'Stephen'],
   Tony:  ['Anthony'],
   Pete:  ['Peter'],
-  Alex:  ['Alexander'],
+  Alex:  ['Alexander', 'John'],   // Alex Beaudoin → John Beaudoin
   Andy:  ['Andrew'],
   Bud:   ['Robert'],
   Liz:   ['Elizabeth'],
@@ -61,6 +61,12 @@ export const NICKNAME_MAP: Record<string, string[]> = {
   Jon:   ['Jonathan'],
   Abe:   ['Abraham'],
   Gabe:  ['Gabriel'],
+  // Go-by names that are not short forms of the formal name. The last name
+  // still has to match, so listing the ordinary expansion first keeps the
+  // common case ahead of the department-specific one: Wes Strawn resolves to
+  // Wesley Strawn, Wes Westerman to Jack Westerman.
+  Wes:   ['Wesley', 'Jack'],      // Wes Westerman → Jack Westerman
+  JJ:    ['Gerardo'],             // JJ Oliveros → Gerardo Oliveros
 }
 
 export interface EmployeeRow {
