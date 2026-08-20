@@ -21,13 +21,14 @@
 // Types
 // ────────────────────────────────────────────────────────────────
 
-export type AssignmentType =
-  | 'regular'
-  | 'callback_voluntary'
-  | 'callback_mandatory'
-  | 'trade'
-  | 'ccc_intern'
-  | 'light_duty'
+import type { AssignmentType } from './schedule/assignment-types'
+import {
+  standardShiftWindow,
+  lightDutyShiftWindow,
+  rangeShiftWindow,
+} from './schedule/shift-window'
+
+export type { AssignmentType }
 
 export interface ParsedRow {
   /** DB apparatus_id, e.g. "E-1", "M-3", "BC-2" */
@@ -247,84 +248,9 @@ function parseShiftDate(text: string): string {
   return `${year}-${mon}-${day.padStart(2, '0')}`
 }
 
-function makeTimestamps(
-  shiftDate: string,
-  isHalfShift: boolean,
-): { startDt: string; endDt: string; hoursScheduled: number } {
-  // Shift start: 08:00 PDT = 15:00 UTC same calendar day
-  const startDt = `${shiftDate}T15:00:00+00:00`
-
-  const [year, month, dayStr] = shiftDate.split('-').map(Number)
-  const nextDay = new Date(Date.UTC(year, month - 1, dayStr + 1))
-  const nextDate = nextDay.toISOString().slice(0, 10)
-
-  if (isHalfShift) {
-    // 08:00–18:00 PDT = 15:00–01:00 UTC next day
-    return { startDt, endDt: `${nextDate}T01:00:00+00:00`, hoursScheduled: 10.0 }
-  }
-  // Full shift: 08:00–08:00 PDT = 15:00–15:00 UTC next day
-  return { startDt, endDt: `${nextDate}T15:00:00+00:00`, hoursScheduled: 24.0 }
-}
-
-/** Light duty: 07:00–17:00 PDT = 14:00–00:00 UTC */
-function makeTimestampsLightDuty(
-  shiftDate: string,
-): { startDt: string; endDt: string; hoursScheduled: number } {
-  const startDt = `${shiftDate}T14:00:00+00:00`
-  const [year, month, dayStr] = shiftDate.split('-').map(Number)
-  const nextDay = new Date(Date.UTC(year, month - 1, dayStr + 1))
-  const nextDate = nextDay.toISOString().slice(0, 10)
-  return { startDt, endDt: `${nextDate}T00:00:00+00:00`, hoursScheduled: 10.0 }
-}
-
-function pad2(n: number): string { return String(n).padStart(2, '0') }
-
-/**
- * Build UTC timestamps from a PDT local time range embedded in the PDF.
- * All SFD shifts run in Pacific Daylight Time (UTC−7).
- * If end time ≤ start time (clock), end is on the next calendar day.
- *
- * Examples:
- *   08:00–17:00  → 9 h same-day-to-next-day UTC
- *   17:00–20:30  → 3.5 h same-day
- *   20:30–08:00  → 11.5 h wrapping to next day
- */
-function makeTimestampsFromRange(
-  shiftDate: string,
-  startHH: number, startMM: number,
-  endHH: number,   endMM: number,
-): { startDt: string; endDt: string; hoursScheduled: number } {
-  const PDT_OFFSET = 7 * 60  // minutes; PDT = UTC−7
-
-  const startLocal = startHH * 60 + startMM
-  const endLocal   = endHH   * 60 + endMM
-  // End wraps past midnight if its clock time is ≤ start clock time
-  const endIsNextDay = endLocal <= startLocal
-
-  const [year, month, dayStr] = shiftDate.split('-').map(Number)
-  const baseMs = Date.UTC(year, month - 1, dayStr)
-
-  // Start → UTC
-  const startUtc  = startLocal + PDT_OFFSET
-  const startDOff = Math.floor(startUtc / 1440)
-  const startUH   = Math.floor((startUtc % 1440) / 60)
-  const startUM   = startUtc % 60
-  const startDate = new Date(baseMs + startDOff * 86400000).toISOString().slice(0, 10)
-  const startDt   = `${startDate}T${pad2(startUH)}:${pad2(startUM)}:00+00:00`
-
-  // End → UTC (add 1440 if next day)
-  const endAdj  = endLocal + (endIsNextDay ? 1440 : 0)
-  const endUtc  = endAdj + PDT_OFFSET
-  const endDOff = Math.floor(endUtc / 1440)
-  const endUH   = Math.floor((endUtc % 1440) / 60)
-  const endUM   = endUtc % 60
-  const endDate = new Date(baseMs + endDOff * 86400000).toISOString().slice(0, 10)
-  const endDt   = `${endDate}T${pad2(endUH)}:${pad2(endUM)}:00+00:00`
-
-  const hoursScheduled = Math.round(((endAdj - startLocal) / 60) * 10) / 10
-
-  return { startDt, endDt, hoursScheduled }
-}
+// Shift time-window math lives in lib/schedule/shift-window.ts so the PDF
+// importer and the schedule builder's publish route produce identical
+// start_dt / end_dt / hours_scheduled values.
 
 // ────────────────────────────────────────────────────────────────
 // Lookahead helper
@@ -593,10 +519,10 @@ export function parseScheduleText(text: string): ParseResult {
       const isOt = OT_CODES.has(typeCode)
       // Priority: light_duty fixed window > inline PDF range > default shift timestamps
       const timestamps = currentIsLightDuty
-        ? makeTimestampsLightDuty(shiftDate)
+        ? lightDutyShiftWindow(shiftDate)
         : inlineRange
-          ? makeTimestampsFromRange(shiftDate, inlineRange.startHH, inlineRange.startMM, inlineRange.endHH, inlineRange.endMM)
-          : makeTimestamps(shiftDate, currentIsHalfShift)
+          ? rangeShiftWindow(shiftDate, inlineRange.startHH, inlineRange.startMM, inlineRange.endHH, inlineRange.endMM)
+          : standardShiftWindow(shiftDate, currentIsHalfShift)
 
       rows.push({
         apparatusId: resolvedApparatusId,

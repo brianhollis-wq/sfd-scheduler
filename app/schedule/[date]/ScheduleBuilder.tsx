@@ -11,6 +11,12 @@
 
 import { useState, useCallback, useTransition } from 'react'
 import Link from 'next/link'
+import {
+  ON_DUTY_TYPES,
+  LEAVE_TYPE_OPTIONS,
+  ASSIGNABLE_TYPE_OPTIONS,
+  assignmentLabel,
+} from '@/lib/schedule/assignment-types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -62,30 +68,12 @@ const BATTALIONS = [
   { name: 'South Battalion', bc: 'BC-4', stations: [1, 4, 6, 7, 9] },
 ]
 
-const ON_DUTY_TYPES = new Set([
-  'regular', 'callback_voluntary', 'callback_mandatory', 'peak_engine', 'trade',
-])
-
-const LEAVE_TYPES = [
-  { value: 'vacation',  label: 'Vacation' },
-  { value: 'sick',      label: 'Sick Leave' },
-  { value: 'FMLA',      label: 'FMLA' },
-  { value: 'OFLA',      label: 'OFLA' },
-  { value: 'PLO',       label: 'PLO' },
-  { value: 'injury',    label: 'Injury Leave' },
-  { value: 'kelly_day', label: 'Kelly Day' },
-  { value: 'WOC',       label: 'WOC' },
-  { value: 'AIC',       label: 'AIC' },
-  { value: 'BUM',       label: 'BUM' },
-]
-
-const CALLBACK_TYPES = [
-  { value: 'callback_voluntary',  label: 'Callback VOL' },
-  { value: 'callback_mandatory',  label: 'Callback MAN' },
-  { value: 'peak_engine',         label: 'Peak Engine' },
-  { value: 'trade',               label: 'Trade' },
-  { value: 'regular',             label: 'Regular' },
-]
+// Assignment vocabulary is shared with the crew board, the eligibility APIs and
+// the publish route — see lib/schedule/assignment-types.ts. The local copy this
+// replaces was missing 'light_duty', so a light-duty member loaded into the
+// builder read as absent and was struck through.
+const LEAVE_TYPES    = LEAVE_TYPE_OPTIONS
+const CALLBACK_TYPES = ASSIGNABLE_TYPE_OPTIONS
 
 const RANK_LABEL: Record<string, string> = {
   BC: 'BC', Captain: 'CAPT', FAO: 'FAO', SRP: 'SRP', SRE: 'SRE',
@@ -110,13 +98,8 @@ function posKey(p: EditablePosition) { return p.key }
 
 function rankLabel(r: string) { return RANK_LABEL[r] ?? r.toUpperCase() }
 
-function leaveLabel(t: string) {
-  return LEAVE_TYPES.find((l) => l.value === t)?.label ?? t
-}
-
-function callbackLabel(t: string) {
-  return CALLBACK_TYPES.find((c) => c.value === t)?.label ?? t
-}
+const leaveLabel    = assignmentLabel
+const callbackLabel = assignmentLabel
 
 // ── Status Dot ────────────────────────────────────────────────────────────────
 

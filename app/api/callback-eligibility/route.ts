@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TABLES } from '@/lib/db/tables'
+// ON_DUTY_TYPES now includes 'light_duty' — see the note in mot-eligibility.
+import { ON_DUTY_TYPES, leaveExclusionLabel } from '@/lib/schedule/assignment-types'
+import {
+  ELIGIBILITY_COLUMNS,
+  ELIGIBILITY_HISTORY_COLUMNS,
+} from '@/lib/schedule/daily-assignment'
 
 // SFD Fiscal Year starts July 1
 function fiscalYear(date: Date): number {
@@ -16,26 +23,7 @@ function toDateStr(date: Date): string {
   return date.toISOString().split('T')[0]
 }
 
-const ON_DUTY_TYPES = new Set([
-  'regular',
-  'callback_voluntary',
-  'callback_mandatory',
-  'peak_engine',
-  'trade',
-])
 
-const LEAVE_LABELS: Record<string, string> = {
-  vacation:  'Vacation',
-  sick:      'Sick',
-  FMLA:      'FMLA',
-  OFLA:      'OFLA',
-  PLO:       'PLO',
-  injury:    'Injury Leave',
-  kelly_day: 'Kelly Day',
-  WOC:       'WOC',
-  AIC:       'AIC',
-  BUM:       'BUM',
-}
 
 const CALLBACK_LISTS = [
   { type: 'Captain_vol',  label: 'Captain',        singleRole: false },
@@ -65,8 +53,8 @@ export async function GET(req: NextRequest) {
 
   // ── Assignments for the target shift date ────────────────────
   const { data: assignments, error: assignErr } = await supabase
-    .from('daily_assignments')
-    .select('employee_id, assignment_type')
+    .from(TABLES.dailyAssignments)
+    .select(ELIGIBILITY_COLUMNS)
     .eq('shift_date', shiftDate)
 
   if (assignErr) {
@@ -85,7 +73,7 @@ export async function GET(req: NextRequest) {
   // ── Debit day workers on the target date ─────────────────────
   // Debit days live in their own table; status='scheduled' means they're working it
   const { data: debitToday, error: debitTodayErr } = await supabase
-    .from('debit_days')
+    .from(TABLES.debitDays)
     .select('employee_id')
     .eq('debit_date', shiftDate)
     .eq('status', 'scheduled')
@@ -108,8 +96,8 @@ export async function GET(req: NextRequest) {
   // Single-role classifications (SRP, SRE) don't have debit days, so only
   // daily_assignments needs to be checked for the 72-hr / consecutive-day history.
   const { data: histRows, error: histErr } = await supabase
-    .from('daily_assignments')
-    .select('employee_id, shift_date, assignment_type')
+    .from(TABLES.dailyAssignments)
+    .select(ELIGIBILITY_HISTORY_COLUMNS)
     .gte('shift_date', windowStart)
     .lte('shift_date', windowEnd)
     .in('assignment_type', [...ON_DUTY_TYPES])
@@ -147,7 +135,7 @@ export async function GET(req: NextRequest) {
 
   for (const list of CALLBACK_LISTS as Array<{ type: string; label: string; singleRole: boolean }>) {
     const { data: rows, error: listErr } = await supabase
-      .from('ot_list_positions')
+      .from(TABLES.otListPositions)
       .select(`
         id,
         employee_id,
@@ -174,7 +162,7 @@ export async function GET(req: NextRequest) {
       const empId      = m.employee_id
       const assignType = assignMap.get(empId) ?? null
       const onDuty     = assignType ? ON_DUTY_TYPES.has(assignType) : false
-      const leaveLabel = assignType ? LEAVE_LABELS[assignType] : undefined
+      const leaveLabel = leaveExclusionLabel(assignType)
       const onDebit    = debitTodaySet.has(empId)
 
       let eligible = false

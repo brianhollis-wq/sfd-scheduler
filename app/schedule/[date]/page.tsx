@@ -11,6 +11,8 @@
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import ScheduleBuilder, { type ApparatusRoster } from './ScheduleBuilder'
+import { TABLES } from '@/lib/db/tables'
+import { SCHEDULE_BUILDER_COLUMNS } from '@/lib/schedule/daily-assignment'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -64,7 +66,7 @@ async function getRosterForDate(date: string): Promise<{
 
   // 1. Shift letter for this date
   const { data: calRow } = await supabase
-    .from('shift_calendar')
+    .from(TABLES.shiftCalendar)
     .select('shift_letter')
     .eq('shift_date', date)
     .maybeSingle()
@@ -74,8 +76,8 @@ async function getRosterForDate(date: string): Promise<{
 
   // 2. Try daily_assignments first (has full OT/callback/trade crew)
   const { data: dailyRows } = await supabase
-    .from('daily_assignments')
-    .select('id, apparatus_id, employee_id, position, assignment_type, sort_order, note')
+    .from(TABLES.dailyAssignments)
+    .select(SCHEDULE_BUILDER_COLUMNS)
     .eq('shift_date', date)
     .order('apparatus_id')
     .order('sort_order')
@@ -99,7 +101,7 @@ async function getRosterForDate(date: string): Promise<{
     // Fall back to shift_roster — base regular crew
     source = 'roster'
     const { data: rosterRows, error: rosterErr } = await supabase
-      .from('shift_roster')
+      .from(TABLES.shiftRoster)
       .select('id, apparatus_id, position, sort_order, note, employee_id')
       .eq('shift_letter', shiftLetter)
       .order('apparatus_id')
@@ -134,7 +136,7 @@ async function getRosterForDate(date: string): Promise<{
 
   if (employeeIds.length > 0) {
     const { data: empRows, error: empErr } = await supabase
-      .from('employees')
+      .from(TABLES.employees)
       .select('id, first_name, last_name, rank, badge_number, is_paramedic, shift_assignment')
       .in('id', employeeIds)
 

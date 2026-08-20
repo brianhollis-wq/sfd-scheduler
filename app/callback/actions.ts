@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { TABLES } from '@/lib/db/tables'
 
 // Record a voluntary callback.
 // If isFullShift is true (20+ hours) the person moves to the bottom of the list.
@@ -18,7 +19,7 @@ export async function recordCallbackAction(
   if (!isFullShift) {
     // Partial shift — update date only, no position change
     const { error } = await supabase
-      .from('ot_list_positions')
+      .from(TABLES.otListPositions)
       .update({ last_mandatory_date: callbackDate })
       .eq('id', listPositionId)
 
@@ -30,7 +31,7 @@ export async function recordCallbackAction(
 
   // Full shift — move to bottom of list
   const { data: current, error: fetchErr } = await supabase
-    .from('ot_list_positions')
+    .from(TABLES.otListPositions)
     .select('times_mandatoried')
     .eq('id', listPositionId)
     .single()
@@ -41,7 +42,7 @@ export async function recordCallbackAction(
 
   // Find current max rank for this list
   const { data: maxRow, error: maxErr } = await supabase
-    .from('ot_list_positions')
+    .from(TABLES.otListPositions)
     .select('mandatory_rank')
     .eq('list_type', listType)
     .eq('fiscal_year', fiscalYear)
@@ -56,7 +57,7 @@ export async function recordCallbackAction(
   const newTimes = (current.times_mandatoried ?? 0) + 1
 
   const { error: updateErr } = await supabase
-    .from('ot_list_positions')
+    .from(TABLES.otListPositions)
     .update({
       mandatory_rank:      newRank,
       last_mandatory_date: callbackDate,
@@ -78,7 +79,7 @@ export async function setLastCallbackDateAction(
   const supabase = createAdminClient()
 
   const { error } = await supabase
-    .from('ot_list_positions')
+    .from(TABLES.otListPositions)
     .update({ last_mandatory_date: callbackDate })
     .eq('id', listPositionId)
 

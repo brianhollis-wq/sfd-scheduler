@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TABLES } from '@/lib/db/tables'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
   const pattern = `%${q}%`
 
   const { data, error } = await supabase
-    .from('employees')
+    .from(TABLES.employees)
     .select('id, first_name, last_name, rank, badge_number, is_paramedic, shift_assignment')
     .or(`last_name.ilike.${pattern},first_name.ilike.${pattern}`)
     .order('last_name')

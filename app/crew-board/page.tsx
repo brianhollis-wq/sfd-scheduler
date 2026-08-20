@@ -1,6 +1,13 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import Link from 'next/link'
 import DateNavClient from './DateNavClient'
+import { TABLES } from '@/lib/db/tables'
+import {
+  ON_DUTY_TYPES,
+  INTERN_TYPES,
+  assignmentLabel,
+} from '@/lib/schedule/assignment-types'
+import { CREW_BOARD_COLUMNS } from '@/lib/schedule/daily-assignment'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -101,37 +108,10 @@ function apparatusSort(a: AppWithCrew, b: AppWithCrew): number {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const ON_DUTY_TYPES = new Set(['regular', 'callback_voluntary', 'callback_mandatory', 'peak_engine', 'trade', 'light_duty'])
-
-/** Assignment types shown as interns — non-staffing, accountability only */
-const INTERN_TYPES = new Set(['ccc_intern'])
-
 const CREW_RANK_ORDER: Record<string, number> = {
   BC: 1, Senior_DFM: 2, DFM: 3, Captain: 4, FAO: 5,
   SRP: 6, SRE: 7, FF_PM: 8, FF: 9,
   Probationary_PM: 10, Probationary_FF: 11, Staff: 12,
-}
-
-const LEAVE_LABELS: Record<string, string> = {
-  vacation:  'Vacation',
-  sick:      'Sick Leave',
-  FMLA:      'FMLA',
-  OFLA:      'OFLA',
-  PLO:       'PLO',
-  injury:    'Injury Leave',
-  kelly_day: 'Kelly Day',
-  WOC:       'WOC',
-  AIC:       'AIC',
-  BUM:       'BUM',
-}
-
-const DUTY_LABELS: Record<string, string> = {
-  regular:            'Regular',
-  callback_voluntary: 'Callback VOL',
-  callback_mandatory: 'Callback MAN',
-  peak_engine:        'Peak Engine',
-  trade:              'Trade',
-  light_duty:         'Light Duty',
 }
 
 function fmtTime(dt: string | null): string {
@@ -463,7 +443,7 @@ function PersonnelView({ assignments, debitRows }: {
                     </td>
                     <td className={`${td} text-[#c9a84c]`}>{formatRank(a.employees!.rank)}</td>
                     <td className={`${td} text-zinc-300 font-mono tracking-widest`}>{a.apparatus_id || '—'}</td>
-                    <td className={`${td} text-zinc-400`}>{DUTY_LABELS[a.assignment_type] ?? a.assignment_type}</td>
+                    <td className={`${td} text-zinc-400`}>{assignmentLabel(a.assignment_type)}</td>
                     <td className={`${td} text-zinc-500`}>{a.employees!.shift_assignment ?? '—'}</td>
                     <td className={td}>
                       {a.employees!.is_paramedic && (
@@ -506,7 +486,7 @@ function PersonnelView({ assignments, debitRows }: {
                     </td>
                     <td className={`${td} text-[#c9a84c]`}>{formatRank(a.employees!.rank)}</td>
                     <td className={`${td} text-amber-300/80`}>
-                      {LEAVE_LABELS[a.assignment_type] ?? a.assignment_type}
+                      {assignmentLabel(a.assignment_type)}
                     </td>
                     <td className={`${td} text-zinc-500`}>{a.employees!.shift_assignment ?? '—'}</td>
                   </tr>
@@ -581,7 +561,7 @@ export default async function StaffingBoard({
 
   // Load apparatus
   const { data: apparatus, error: apErr } = await supabase
-    .from('apparatus')
+    .from(TABLES.apparatus)
     .select('*, stations(id, name)')
     .order('id')
 
@@ -592,10 +572,8 @@ export default async function StaffingBoard({
   let assignments: Assignment[] = []
 
   const { data: dateData, error: asErr } = await supabase
-    .from('daily_assignments')
-    .select(
-      'apparatus_id, employee_id, assignment_type, start_dt, end_dt, employees(first_name, last_name, rank, badge_number, is_paramedic, shift_assignment)'
-    )
+    .from(TABLES.dailyAssignments)
+    .select(CREW_BOARD_COLUMNS)
     .eq('shift_date', selectedDate)
 
   if (asErr) return <ErrorScreen err={asErr} />
@@ -605,7 +583,7 @@ export default async function StaffingBoard({
   } else if (selectedDate === today) {
     // Only fall back to most recent date when viewing today with no data
     const { data: latest } = await supabase
-      .from('daily_assignments')
+      .from(TABLES.dailyAssignments)
       .select('shift_date')
       .order('shift_date', { ascending: false })
       .limit(1)
@@ -614,7 +592,7 @@ export default async function StaffingBoard({
     if (latest?.shift_date) {
       shiftDate = latest.shift_date
       const { data: fallbackData } = await supabase
-        .from('daily_assignments')
+        .from(TABLES.dailyAssignments)
         .select(
           'apparatus_id, employee_id, assignment_type, start_dt, end_dt, employees(first_name, last_name, rank, badge_number, is_paramedic, shift_assignment)'
         )
@@ -627,7 +605,7 @@ export default async function StaffingBoard({
 
   // Load debit day workers for selected date
   const { data: debitRows } = await supabase
-    .from('debit_days')
+    .from(TABLES.debitDays)
     .select('employee_name, apparatus, position, shift_letter')
     .eq('debit_date', shiftDate)
     .eq('status', 'scheduled')
@@ -635,7 +613,7 @@ export default async function StaffingBoard({
 
   // Load shift letter
   const { data: rotationRow } = await supabase
-    .from('shift_rotation')
+    .from(TABLES.shiftRotation)
     .select('shift_letter')
     .eq('shift_date', shiftDate)
     .single()

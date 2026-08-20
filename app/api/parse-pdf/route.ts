@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseScheduleText } from '@/lib/parse-schedule'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { TABLES } from '@/lib/db/tables'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -152,7 +153,7 @@ async function findEmployee(
 ): Promise<EmployeeRow | null> {
   // 1. Exact ilike match
   const { data: exact } = await supabase
-    .from('employees')
+    .from(TABLES.employees)
     .select('id, first_name, last_name')
     .ilike('first_name', firstName)
     .ilike('last_name', lastName)
@@ -164,7 +165,7 @@ async function findEmployee(
   const altFirstNames = NICKNAME_MAP[firstName] ?? []
   for (const alt of altFirstNames) {
     const { data } = await supabase
-      .from('employees')
+      .from(TABLES.employees)
       .select('id, first_name, last_name')
       .ilike('first_name', alt)
       .ilike('last_name', lastName)
@@ -177,7 +178,7 @@ async function findEmployee(
   if (lastName.includes('-')) {
     const normalized = lastName.replace(/-/g, ' ')
     const { data } = await supabase
-      .from('employees')
+      .from(TABLES.employees)
       .select('id, first_name, last_name')
       .ilike('first_name', firstName)
       .ilike('last_name', normalized)
@@ -188,7 +189,7 @@ async function findEmployee(
     // 4. Nickname + hyphen normalization combined
     for (const alt of altFirstNames) {
       const { data: d2 } = await supabase
-        .from('employees')
+        .from(TABLES.employees)
         .select('id, first_name, last_name')
         .ilike('first_name', alt)
         .ilike('last_name', normalized)
@@ -203,7 +204,7 @@ async function findEmployee(
   //    Schema: name_aliases(alias text PK, employee_id int FK employees.id)
   const alias = `${firstName} ${lastName}`.trim()
   const { data: aliasRow } = await supabase
-    .from('name_aliases')
+    .from(TABLES.nameAliases)
     .select('employee_id')
     .ilike('alias', alias)
     .limit(1)
@@ -211,7 +212,7 @@ async function findEmployee(
 
   if (aliasRow) {
     const { data: emp } = await supabase
-      .from('employees')
+      .from(TABLES.employees)
       .select('id, first_name, last_name')
       .eq('id', (aliasRow as { employee_id: number }).employee_id)
       .limit(1)
