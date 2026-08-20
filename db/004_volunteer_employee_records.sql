@@ -1,13 +1,11 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 004 — Employee record for the volunteer post
 --
--- READ THIS BEFORE RUNNING. It is the only migration that creates a person, and
--- the only one that chooses a key.
+-- READ THIS BEFORE RUNNING. It is the only migration that creates a person.
 --
 -- daily_assignments identifies a person solely by employee_id, a foreign key
 -- into employees. Someone with no row there cannot be placed on the board at
--- all — there is nowhere to put a name. Two people in the personnel master have
--- no payroll ID:
+-- all. Two people in the personnel master have no payroll ID:
 --
 --   Peggy Lowry      volunteer, Training Division   — on the roster (TR-SA)
 --   Brian Clothier   contract Medical Director      — not on the roster
@@ -17,79 +15,128 @@
 -- She is identified as VSA-C6, stored as her badge number and shown on the
 -- board as her call sign. That cannot be her employees.id: the column is an
 -- integer and daily_assignments.employee_id is an integer foreign key into it.
--- So she also gets the numeric key 9843 for the foreign key alone. Real payroll
--- IDs currently run 554-7585, so 9843 is clear of all of them today, though it
--- is not reserved — if payroll IDs climb that far the insert below would fail
--- on a duplicate key rather than overwrite anyone.
+-- So she also gets the numeric key 9843 for the foreign key alone.
 --
--- A previous version failed with "null value in column rank violates not-null
--- constraint". It tried to copy a rank from an existing employee whose rank
--- mentioned "civilian", and no such row exists: the personnel master's Rank
--- column ("Civilian Non-Sworn") is a different vocabulary from employees.rank,
--- which uses the app's own codes. Step 1 now shows what those codes actually
--- are so the value below is chosen from real data rather than guessed.
+-- WHY THIS IS NOT A PLAIN INSERT
+--
+-- Two earlier attempts each failed on a different NOT NULL column — first
+-- rank, then classification — because this table has many required columns and
+-- listing them by guesswork means one round trip per column.
+--
+-- So Step 2 does not name them. It copies every column that is required and
+-- has no default from an existing employee, then overrides only the four
+-- fields that identify the person. Whatever the table requires is satisfied by
+-- construction.
+--
+-- The template is deliberately another administrative civilian — Gina Cepeda,
+-- confirmed present — so the copied classification and rank describe a
+-- non-sworn staff member rather than a firefighter.
+--
+-- Only columns that are NOT NULL *and* have no default are copied. Everything
+-- optional stays null, so no personal detail — email, phone, address, hire
+-- date — is carried across from the template onto Peggy's record.
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- ── Step 1: what does this table actually require and allow? ─────────────────
+-- ── Step 1: look before inserting ────────────────────────────────────────────
 
--- 1a. Columns with no default that cannot be null. Every one of these must
---     appear in the INSERT. If this lists anything beyond id, first_name,
---     last_name and rank, add it before running Step 2.
-SELECT 'required columns' AS check, column_name, data_type
+-- 1a. Exactly the columns Step 2 will copy. Anything person-specific appearing
+--     in this list should be added to the override in Step 2 rather than
+--     inherited from the template.
+SELECT 'copied from template' AS check, column_name, data_type
   FROM information_schema.columns
  WHERE table_name = 'employees'
    AND is_nullable = 'NO'
    AND column_default IS NULL
+   AND is_generated = 'NEVER'
+   AND is_identity  = 'NO'
  ORDER BY ordinal_position;
 
--- 1b. THE ONE THAT MATTERS — the rank values actually in use, most common
---     first. Pick the one that fits a non-sworn staff member; it is very
---     likely 'Staff'. If rank is an enum, this shows only values in use, so
---     also run:  SELECT unnest(enum_range(NULL::<enum name>));
-SELECT 'rank values' AS check, rank::text AS value, count(*) AS people
+-- 1b. What the template row holds for those columns.
+SELECT 'template' AS check, id, first_name, last_name, rank
   FROM employees
- GROUP BY rank
- ORDER BY count(*) DESC;
+ WHERE id = 2459;
 
--- 1c. Confirm 9843 is free and see where the real IDs end.
-SELECT 'id range' AS check,
-       min(id) AS lowest,
-       max(id) AS highest,
-       count(*) FILTER (WHERE id = 9843) AS id_9843_taken
+-- 1c. Confirm 9843 is free.
+SELECT 'id check' AS check,
+       count(*) FILTER (WHERE id = 9843) AS id_9843_taken,
+       max(id) AS highest_id
   FROM employees;
 
 -- ── Step 2: create the record ────────────────────────────────────────────────
--- Idempotent.
+-- Idempotent, and adapts to whatever this table actually requires.
 --
--- rank is taken from an administrative civilian already on the roster — Cepeda,
--- Cardenas, Chambers, Knowles, or one of the EMS support staff — because
--- whatever value they carry is both valid for the column and right for a
--- non-sworn staff member. If none of them are in employees the COALESCE falls
--- back to 'Staff', which is the code the crew board already renders as STAFF.
---
--- If Step 1b showed something different, replace the whole rank expression with
--- that literal.
-INSERT INTO employees (id, first_name, last_name, rank, badge_number, is_paramedic)
-SELECT 9843,
-       'Peggy',
-       'Lowry',
-       COALESCE(
-         (SELECT rank
-            FROM employees
-           WHERE id IN (2459, 6400, 1948, 6399, 7335, 7338, 7455, 6993)
-             AND rank IS NOT NULL
-           LIMIT 1),
-         'Staff'
-       ),
-       'VSA-C6',
-       false
-ON CONFLICT (id) DO NOTHING;
+-- The column list is built at run time from information_schema rather than
+-- written out here, because a literal list has to be right about every NOT NULL
+-- column and a plain "INSERT INTO employees" would try to write generated
+-- columns such as full_name. Both of those failed on earlier attempts.
+DO $$
+DECLARE
+  payload  jsonb;
+  col_list text;
+BEGIN
+  IF EXISTS (SELECT 1 FROM employees WHERE id = 9843) THEN
+    RAISE NOTICE 'employee 9843 already exists — nothing to do';
+    RETURN;
+  END IF;
+
+  -- Every column that must be supplied, taken from the template row. Optional
+  -- columns are deliberately left out, so no personal detail — email, phone,
+  -- address, hire date — is copied from the template onto this record.
+  SELECT jsonb_object_agg(kv.key, kv.value)
+    INTO payload
+    FROM (SELECT to_jsonb(e) AS data FROM employees e WHERE e.id = 2459) AS t,
+         jsonb_each(t.data) AS kv
+   WHERE kv.key IN (
+           SELECT column_name
+             FROM information_schema.columns
+            WHERE table_schema  = current_schema()
+              AND table_name    = 'employees'
+              AND is_nullable   = 'NO'
+              AND column_default IS NULL
+              AND is_generated  = 'NEVER'
+              AND is_identity   = 'NO'
+         );
+
+  IF payload IS NULL THEN
+    RAISE EXCEPTION
+      'template employee 2459 (Gina Cepeda) not found — pick another administrative civilian';
+  END IF;
+
+  -- Identity of the person being created.
+  payload := payload || jsonb_build_object(
+               'id',         9843,
+               'first_name', 'Peggy',
+               'last_name',  'Lowry');
+
+  -- VSA-C6 only if this table has somewhere to put it. The board reads it from
+  -- the roster's call sign regardless, so its absence costs nothing.
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_schema = current_schema()
+                AND table_name   = 'employees'
+                AND column_name  = 'badge_number') THEN
+    payload := payload || jsonb_build_object('badge_number', 'VSA-C6');
+  END IF;
+
+  SELECT string_agg(quote_ident(key), ', ')
+    INTO col_list
+    FROM jsonb_object_keys(payload) AS key;
+
+  EXECUTE format(
+    'INSERT INTO employees (%1$s) SELECT %1$s FROM jsonb_populate_record(NULL::employees, $1)',
+    col_list
+  ) USING payload;
+
+  RAISE NOTICE 'created employee 9843 (Peggy Lowry) with columns: %', col_list;
+END $$;
 
 -- ── Step 3: verify ───────────────────────────────────────────────────────────
-SELECT 'lowry' AS check, id, first_name, last_name, rank, badge_number
+-- Only columns guaranteed to exist are named here, so this cannot fail on a
+-- table shaped differently from the one it was written against.
+SELECT 'lowry' AS check, id, first_name, last_name, rank
   FROM employees
  WHERE id = 9843;
 
--- If the INSERT fails on badge_number, that column does not exist here: drop it
--- and its value from the INSERT and re-run. The board takes VSA-C6 from the
--- roster's call sign, not from this row, so nothing is lost.
+-- And the badge, separately, since that column is optional.
+SELECT 'badge' AS check, to_jsonb(e) -> 'badge_number' AS badge_number
+  FROM employees e
+ WHERE e.id = 9843;
