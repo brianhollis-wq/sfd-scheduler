@@ -9,6 +9,8 @@ import {
   assignmentLabel,
 } from '@/lib/schedule/assignment-types'
 import { CREW_BOARD_COLUMNS } from '@/lib/schedule/daily-assignment'
+import { rankLabel, rankSortValue } from '@/lib/employees/rank'
+import { callSignForApparatus } from '@/lib/schedule/admin-roster'
 import {
   ADMIN_UNITS,
   apparatusCountsTowardMinimum,
@@ -116,12 +118,6 @@ function apparatusSort(a: AppWithCrew, b: AppWithCrew): number {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const CREW_RANK_ORDER: Record<string, number> = {
-  BC: 1, Senior_DFM: 2, DFM: 3, Captain: 4, FAO: 5,
-  SRP: 6, SRE: 7, FF_PM: 8, FF: 9,
-  Probationary_PM: 10, Probationary_FF: 11, Staff: 12,
-}
-
 function fmtTime(dt: string | null): string {
   if (!dt) return '????'
   return new Date(dt).toLocaleTimeString('en-US', {
@@ -137,8 +133,8 @@ function isFullShift(start: string | null, end: string | null): boolean {
 }
 
 function crewSort(a: Assignment, b: Assignment): number {
-  const ra = CREW_RANK_ORDER[a.employees?.rank ?? ''] ?? 99
-  const rb = CREW_RANK_ORDER[b.employees?.rank ?? ''] ?? 99
+  const ra = rankSortValue(a.employees?.rank)
+  const rb = rankSortValue(b.employees?.rank)
   if (ra !== rb) return ra - rb
   return (a.employees?.last_name ?? '').localeCompare(b.employees?.last_name ?? '')
 }
@@ -151,25 +147,6 @@ function getStatusColor(app: AppWithCrew): 'green' | 'amber' | 'red' | 'gray' | 
   const crewCount = app.crew.filter((a) => countsForStaffing(a.assignment_type)).length
   if (crewCount < app.min_staffing) return 'amber'
   return 'green'
-}
-
-function formatRank(rank: string): string {
-  const map: Record<string, string> = {
-    Probationary_FF: 'PROB',
-    Probationary_PM: 'PROB/PM',
-    FF:              'FF',
-    FF_PM:           'PM/FF',
-    FAO:             'FAO',
-    Captain:         'CAPT',
-    BC:              'BC',
-    DFM:             'DFM',
-    Senior_DFM:      'SR DFM',
-    Staff:           'STAFF',
-    SRE:             'SRE',
-    SRP:             'SRP',
-    CCC_Intern:      'INTERN',
-  }
-  return map[rank] ?? rank.toUpperCase()
 }
 
 // ── Status dot ─────────────────────────────────────────────────────────────────
@@ -223,7 +200,9 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
       <div className={`${headerBg} px-3 py-2 flex items-center justify-between`}>
         <div className="flex items-center gap-2">
           <StatusDot color={color} />
-          <span className="font-mono font-bold text-white tracking-widest text-sm">{app.id}</span>
+          <span className="font-mono font-bold text-white tracking-widest text-sm">
+            {callSignForApparatus(app.id) ?? app.id}
+          </span>
           {deployedLabel && (
             <span className="text-[9px] font-mono font-bold text-orange-300 bg-orange-900/30 border border-orange-700/40 rounded px-1.5 py-0.5 tracking-widest">
               {deployedLabel}
@@ -263,8 +242,8 @@ function ApparatusCard({ app, compact }: { app: AppWithCrew; compact?: boolean }
                       title; line crew by fire rank. */}
                   <span className={`text-[#c9a84c] shrink-0 ${app.isAdmin ? 'w-32' : 'w-14'}`}>
                     {app.isAdmin
-                      ? (a.position ?? (a.employees ? formatRank(a.employees.rank) : '—'))
-                      : (a.employees ? formatRank(a.employees.rank) : '—')}
+                      ? (a.position ?? (a.employees ? rankLabel(a.employees.rank) : '—'))
+                      : (a.employees ? rankLabel(a.employees.rank) : '—')}
                   </span>
                   <span className={`flex-1 ${a.employees ? 'text-zinc-200' : 'text-amber-500/70 italic'}`}>
                     {a.employees
@@ -422,8 +401,8 @@ function PersonnelView({ assignments, debitRows }: {
   const onDuty = assignments
     .filter(a => isOnDuty(a.assignment_type) && a.employees)
     .sort((a, b) => {
-      const ra = CREW_RANK_ORDER[a.employees?.rank ?? ''] ?? 99
-      const rb = CREW_RANK_ORDER[b.employees?.rank ?? ''] ?? 99
+      const ra = rankSortValue(a.employees?.rank)
+      const rb = rankSortValue(b.employees?.rank)
       if (ra !== rb) return ra - rb
       return (a.employees?.last_name ?? '').localeCompare(b.employees?.last_name ?? '')
     })
@@ -469,7 +448,7 @@ function PersonnelView({ assignments, debitRows }: {
                     <td className={`${td} text-zinc-200 font-semibold`}>
                       {a.employees!.last_name}, {a.employees!.first_name.charAt(0)}.
                     </td>
-                    <td className={`${td} text-[#c9a84c]`}>{formatRank(a.employees!.rank)}</td>
+                    <td className={`${td} text-[#c9a84c]`}>{rankLabel(a.employees!.rank)}</td>
                     <td className={`${td} text-zinc-300 font-mono tracking-widest`}>{a.apparatus_id || '—'}</td>
                     <td className={`${td} text-zinc-400`}>{assignmentLabel(a.assignment_type)}</td>
                     <td className={`${td} text-zinc-500`}>{a.employees!.shift_assignment ?? '—'}</td>
@@ -512,7 +491,7 @@ function PersonnelView({ assignments, debitRows }: {
                     <td className={`${td} text-zinc-200 font-semibold`}>
                       {a.employees!.last_name}, {a.employees!.first_name.charAt(0)}.
                     </td>
-                    <td className={`${td} text-[#c9a84c]`}>{formatRank(a.employees!.rank)}</td>
+                    <td className={`${td} text-[#c9a84c]`}>{rankLabel(a.employees!.rank)}</td>
                     <td className={`${td} text-amber-300/80`}>
                       {assignmentLabel(a.assignment_type)}
                     </td>

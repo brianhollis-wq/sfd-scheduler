@@ -13,9 +13,12 @@
 -- for the Office of the Fire Chief, Emergency Operations Division, Business
 -- Operations Division and Emergency Management.
 --
--- An earlier version of this file hardcoded status 'active' and failed with
--- "invalid input value for enum apparatus_status". It no longer guesses: the
--- new rows copy type and status from the existing DFM-1 row.
+-- An earlier version hardcoded status 'active' and failed with "invalid input
+-- value for enum apparatus_status"; the new rows now copy type and status from
+-- the existing DFM-1 row instead of guessing. A later version failed with
+-- "operator does not exist: integer = record" because the Logistics apparatus
+-- tuples had been pasted into the employee ID list further down. Both are
+-- fixed here.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ── Step 1: what does this database actually allow? ──────────────────────────
@@ -29,8 +32,13 @@ SELECT 'status enum' AS check, unnest(enum_range(NULL::apparatus_status))::text 
 SELECT 'existing' AS check, id, call_sign, display_name, type, status, min_staffing, is_reserve
   FROM apparatus
  WHERE id IN ('DFM-1','DFM-2','DFM-3','DFM-4','DFM-5','DFM-6',
-              'INSP-1','INSP-2','TR-DC','TR-CPT1','TR-CPT2','TR-AO',
-              'EMS-DC','EMS-COORD','EMS-TRN','REACH-1')
+              'INSP-1','INSP-2',
+              'TR-DC','TR-CPT1','TR-CPT2','TR-AO','TR-SA',
+              'EMS-DC','EMS-COORD','EMS-TRN','EMS-PDA1','EMS-PDA2','EMS-BILL','EMS-SA',
+              'LOG-ANL','LOG-FB','LOG-EB',
+              'C-1','C-2','C-3','C-4','DC-OPS','EM-1',
+              'FCO-1','FCO-2','BOD-1','BOD-2',
+              'REACH-1')
  ORDER BY id;
 
 -- ── Step 2: create the units that do not exist yet ───────────────────────────
@@ -51,11 +59,17 @@ SELECT v.id,
           ('DFM-6',    'Deputy Fire Marshal 6'),
           ('INSP-1',   'Inspector I - 1'),
           ('INSP-2',   'Inspector I - 2'),
+          -- Training division
+          ('TR-SA',    'Training Division Staff'),
           -- EMS division
           ('EMS-PDA1', 'Paramedic Data Analyst 1'),
           ('EMS-PDA2', 'Paramedic Data Analyst 2'),
           ('EMS-BILL', 'Billing Specialist'),
           ('EMS-SA',   'EMS Staff Assistant'),
+          -- Logistics division
+          ('LOG-ANL',  'Logistics Management Analyst'),
+          ('LOG-FB',   'Fire Buyer'),
+          ('LOG-EB',   'EMS Buyer'),
           -- Office of the Fire Chief
           ('C-1',      'Fire Chief'),
           ('FCO-1',    'Fire Chief''s Office Staff 1'),
@@ -74,52 +88,51 @@ ON CONFLICT (id) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Verification — read-only.
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Verification — read-only. Each query returns its own result set; the Supabase
+-- editor shows only the last one, so run them one at a time to read each.
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- 1. Re-run the "existing" query from Step 1 to confirm all 16 units are there.
+-- 1. Re-run the "existing" query in Step 1. Expect 34 rows once the insert has
+--    run — every unit the permanent roster writes to. A missing one means those
+--    assignments are silently skipped at import.
 
--- 2. THE IMPORTANT ONE — do these people exist in the employees table?
---    The roster resolves them by name (with nickname and alias fallbacks).
---    Anyone absent here will be reported as unmatched on the import screen and
---    will not be committed. Expect 30 rows.
+-- 2. Confirm every pinned employee ID resolves. The roster no longer matches
+--    people by name; each filled post carries an ID from the personnel master.
+--    Expect 34 rows.
 SELECT 'employee' AS check, id, first_name, last_name, rank
   FROM employees
- WHERE (first_name ILIKE 'Sean'    AND last_name ILIKE 'Mansfield')
-    OR (first_name ILIKE 'Sara'    AND last_name ILIKE 'Roth')
-    OR (first_name ILIKE 'Justin'  AND last_name ILIKE 'Guinan')
-    OR (first_name ILIKE 'Jordan'  AND last_name ILIKE 'Wakem')
-    OR (first_name ILIKE 'Janet'   AND last_name ILIKE 'Campbell')
-    OR (first_name ILIKE 'Robert'  AND last_name ILIKE 'Johnson')
-    OR (first_name ILIKE 'Diego'   AND last_name ILIKE 'Legorreta')
-    OR (first_name ILIKE 'Arthur'  AND last_name ILIKE 'Zhiryada')
-    OR (first_name ILIKE 'Michael' AND last_name ILIKE 'Walker')
-    OR (first_name ILIKE 'Scott'   AND last_name ILIKE 'Miller')
-    OR (first_name ILIKE 'Paul'    AND last_name ILIKE 'Bridgehouse')
-    OR (first_name ILIKE 'Matthew' AND last_name ILIKE 'Miller')
-    OR (first_name ILIKE 'Stephen' AND last_name ILIKE 'Boughey')
-    OR (first_name ILIKE 'Darrin'  AND last_name ILIKE 'George')
-    OR (first_name ILIKE 'Katie'   AND last_name ILIKE 'Cardona')
-    OR (first_name ILIKE 'Scott'   AND last_name ILIKE 'Alt')
-    OR (first_name ILIKE 'Amanda'  AND last_name ILIKE 'Palmer')
-    -- EMS division support
-    OR (first_name ILIKE 'Sam'     AND last_name ILIKE 'Ruck')
-    OR (first_name ILIKE 'Emily'   AND last_name ILIKE 'Rodriguez')
-    OR (first_name ILIKE 'Briley'  AND last_name ILIKE 'Davis')
-    OR (first_name ILIKE 'Kelly'   AND last_name ILIKE 'Richardson')
-    -- Administration
-    OR (first_name ILIKE 'David'   AND last_name ILIKE 'Gerboth')
-    OR (first_name ILIKE 'Gina'    AND last_name ILIKE 'Cepeda')
-    OR (first_name ILIKE 'Dora'    AND last_name ILIKE 'Cardenas')
-    OR (first_name ILIKE 'Tige'    AND last_name ILIKE 'Harmon')
-    OR (first_name ILIKE 'Cord'    AND last_name ILIKE 'Von Derahe')
-    OR (first_name ILIKE 'Brian'   AND last_name ILIKE 'Carrara')
-    OR (first_name ILIKE 'Joe'     AND last_name ILIKE 'Hutchinson')
-    OR (first_name ILIKE 'Dean'    AND last_name ILIKE 'Chambers')
-    OR (first_name ILIKE 'Kelli'   AND last_name ILIKE 'Knowles')
- ORDER BY last_name, first_name;
+ WHERE id IN (
+         554, 3524, 6762, 6763, 3103, 5855,   -- deputy fire marshals FM1-FM6
+        7490, 7491,                           -- inspectors
+        7536, 1733,  872, 3580, 9843,         -- training division (9843 = Lowry, db/004)
+        7549, 2587, 7397, 7335, 7338, 7455, 6993,  -- EMS division
+        5467, 7348, 7340,                     -- logistics division
+        7184, 2459, 6400,                     -- Office of the Fire Chief
+         919, 1120,                           -- Emergency Operations Division
+        3375, 6936, 1948, 6399,               -- Business Operations Division
+        2830, 7356                            -- REACH-1
+       )
+ ORDER BY id;
 
--- 3. Administration and EMS support staff are 40-hour civilians and may not be
---    in the employees table at all, which is set up around line personnel.
---    Anyone missing from query 2 is reported on the import screen as unmatched
---    and is not committed — they need an employees row before they will appear.
---    The DC of Operations post is deliberately vacant and needs no employee.
+-- 3. The reverse — which pinned IDs are absent? Expect no rows. A missing ID
+--    now fails its foreign key at import rather than being skipped quietly, so
+--    this is the one to read carefully.
+--    9843 will appear here until db/004 has been run; that is expected.
+SELECT 'missing_id' AS check, v.id
+  FROM (VALUES
+          (554),(3524),(6762),(6763),(3103),(5855),
+          (7490),(7491),
+          (7536),(1733),(872),(3580),(9843),
+          (7549),(2587),(7397),(7335),(7338),(7455),(6993),
+          (5467),(7348),(7340),
+          (7184),(2459),(6400),
+          (919),(1120),
+          (3375),(6936),(1948),(6399),
+          (2830),(7356)
+       ) AS v(id)
+ WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.id = v.id);
+
+-- The DC of Operations post (DC-OPS) is deliberately vacant and needs no
+-- employee record.
