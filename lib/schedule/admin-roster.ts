@@ -12,7 +12,7 @@
  * double-book whoever the PDF already named.
  */
 
-import { rangeShiftWindow, standardShiftWindow, type ShiftWindow } from './shift-window'
+import { rangeShiftWindow, type ShiftWindow } from './shift-window'
 
 /** Day-of-week codes, 0 = Sunday. */
 export const MON_FRI  = [1, 2, 3, 4, 5] as const
@@ -37,8 +37,6 @@ export interface PermanentRosterEntry {
   /** Local start/end clock times, 24h. Pacific, per shift-window.ts. */
   start: [number, number]
   end: [number, number]
-  /** True for a full 24-hour shift; start/end are then ignored. */
-  fullShift?: boolean
 }
 
 // ── The roster ────────────────────────────────────────────────────────────────
@@ -69,11 +67,16 @@ export const PERMANENT_ROSTER: readonly PermanentRosterEntry[] = [
   { apparatusId: 'EMS-COORD', position: 'EMS Coordinator', firstName: 'Darrin',  lastName: 'George',  days: MON_THU, start: [7, 0], end: [17, 0] },
   { apparatusId: 'EMS-TRN',   position: 'EMS Trainer',     firstName: 'Katie',   lastName: 'Cardona', days: MON_THU, start: [7, 0], end: [17, 0] },
 
-  // ── REACH-1 — permanent crew, Tue–Fri, full shift ─────────────────────────
-  // Employee IDs were already pinned here before this table existed; kept
-  // pinned rather than re-resolved by name.
-  { apparatusId: 'REACH-1', position: 'CREW', firstName: 'Scott',  lastName: 'Alt',    employeeId: 2830, days: TUE_FRI, start: [8, 0], end: [8, 0], fullShift: true },
-  { apparatusId: 'REACH-1', position: 'CREW', firstName: 'Amanda', lastName: 'Palmer', employeeId: 7356, days: TUE_FRI, start: [8, 0], end: [8, 0], fullShift: true },
+  // ── REACH-1 — in service Tue–Fri 0700–1700 only ───────────────────────────
+  // Scott Alt (FF/Paramedic) and Amanda Palmer (SRE) are the only people who
+  // work REACH-1. Anyone else on it is a fill-in covering an absence, and a
+  // fill-in comes from the PDF or is entered in the builder — see the
+  // double-booking guard in app/import/actions.ts.
+  //
+  // Employee IDs were pinned here before this table existed; kept pinned
+  // rather than re-resolved by name.
+  { apparatusId: 'REACH-1', position: 'FF_PM', firstName: 'Scott',  lastName: 'Alt',    employeeId: 2830, days: TUE_FRI, start: [7, 0], end: [17, 0] },
+  { apparatusId: 'REACH-1', position: 'SRE',   firstName: 'Amanda', lastName: 'Palmer', employeeId: 7356, days: TUE_FRI, start: [7, 0], end: [17, 0] },
 ]
 
 // ── Lookups ───────────────────────────────────────────────────────────────────
@@ -94,9 +97,7 @@ export function permanentRosterForDate(shiftDate: string): PermanentRosterEntry[
 
 /** The time window an entry works on the given date. */
 export function windowForEntry(entry: PermanentRosterEntry, shiftDate: string): ShiftWindow {
-  return entry.fullShift
-    ? standardShiftWindow(shiftDate)
-    : rangeShiftWindow(shiftDate, entry.start[0], entry.start[1], entry.end[0], entry.end[1])
+  return rangeShiftWindow(shiftDate, entry.start[0], entry.start[1], entry.end[0], entry.end[1])
 }
 
 /** Every apparatus this roster can write to — used to seed and to validate. */

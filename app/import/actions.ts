@@ -55,17 +55,38 @@ async function buildPermanentRosterRows(
   supabase: AdminClient,
   shiftDate: string,
   validApparatus: Set<string>,
-): Promise<{ rows: DailyAssignmentRow[]; unmatched: string[]; skippedApparatus: string[] }> {
+  pdfRows: PreviewRow[],
+): Promise<{
+  rows: DailyAssignmentRow[]
+  unmatched: string[]
+  skippedApparatus: string[]
+  supersededByPdf: string[]
+}> {
   const entries = permanentRosterForDate(shiftDate)
+
+  // The PDF wins wherever it says anything. If it staffed a unit, that is the
+  // actual crew for the day — a fill-in covering someone's vacation, say — and
+  // adding the regular person on top would double-book the unit. Likewise a
+  // person the PDF already placed (or marked absent) must not be re-added here.
+  const apparatusInPdf = new Set(pdfRows.map((r) => r.apparatusId))
+  const employeesInPdf = new Set(
+    pdfRows.map((r) => r.employeeId).filter((id): id is number => id != null),
+  )
 
   const rows: DailyAssignmentRow[] = []
   const unmatched: string[] = []
   const skippedApparatus: string[] = []
+  const supersededByPdf: string[] = []
   const sortOrderByApparatus = new Map<string, number>()
 
   for (const entry of entries) {
     if (!validApparatus.has(entry.apparatusId)) {
       if (!skippedApparatus.includes(entry.apparatusId)) skippedApparatus.push(entry.apparatusId)
+      continue
+    }
+
+    if (apparatusInPdf.has(entry.apparatusId)) {
+      supersededByPdf.push(`${entry.apparatusId} (${entry.firstName} ${entry.lastName})`)
       continue
     }
 
@@ -77,6 +98,11 @@ async function buildPermanentRosterRows(
         continue
       }
       employeeId = emp.id
+    }
+
+    if (employeesInPdf.has(employeeId)) {
+      supersededByPdf.push(`${entry.firstName} ${entry.lastName} (${entry.apparatusId})`)
+      continue
     }
 
     const sortOrder = sortOrderByApparatus.get(entry.apparatusId) ?? 0
@@ -95,7 +121,7 @@ async function buildPermanentRosterRows(
     }))
   }
 
-  return { rows, unmatched, skippedApparatus }
+  return { rows, unmatched, skippedApparatus, supersededByPdf }
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -157,8 +183,14 @@ export async function commitScheduleAction(
     }
 
     // Administration, specialty and REACH-1 staff are never in the PDF.
-    const { rows: rosterRows, unmatched, skippedApparatus } =
-      await buildPermanentRosterRows(supabase, shiftDate, validApparatus)
+    const { rows: rosterRows, unmatched, skippedApparatus, supersededByPdf } =
+      await buildPermanentRosterRows(supabase, shiftDate, validApparatus, toInsert)
+
+    if (supersededByPdf.length > 0) {
+      console.info(
+        `[import] ${shiftDate}: permanent-roster entries superseded by the PDF: ${supersededByPdf.join(', ')}`,
+      )
+    }
 
     if (rosterRows.length > 0) {
       const { error: rosterErr } = await supabase
