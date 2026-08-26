@@ -71,12 +71,29 @@ only the service role may create one.
 
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` is **new**; the other two already exist.
 
-| Variable | Where it comes from |
+All from Supabase → Project Settings → API.
+
+| Variable | Which key |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | same page, the `anon` / publishable key |
-| `SUPABASE_SERVICE_ROLE_KEY` | same page, the `service_role` key — server only, never `NEXT_PUBLIC_` |
-| `NEXT_PUBLIC_SITE_URL` | optional; the production URL, used to build the magic-link redirect when the request carries no `Origin` header |
+| `NEXT_PUBLIC_SUPABASE_URL` | the project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the **publishable** key (`sb_publishable_…`) or, on an older project, the legacy **`anon` `public`** key (a JWT beginning `eyJ`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | the **secret** key (`sb_secret_…`) or the legacy **`service_role`** key |
+| `NEXT_PUBLIC_SITE_URL` | optional; the production URL, used to build the magic-link redirect when a request carries no `Origin` header |
+
+Supabase is midway through renaming these. `anon` and `service_role` are the
+legacy JWT format; `sb_publishable_…` and `sb_secret_…` are the replacements,
+and they substitute one for one. The legacy pair keeps working — deprecation is
+end of 2026 — so there is nothing to migrate today. Prefer the publishable key
+if the project offers it: it can be rotated from the dashboard without
+invalidating anyone's active session, which a JWT cannot.
+
+**The `NEXT_PUBLIC_` prefix means Next.js compiles the value into the browser
+bundle.** That is correct and safe for the publishable/anon key, which is meant
+to be public and grants nothing on its own — row level security decides what it
+can reach. It would be a full database compromise for the secret/service_role
+key, which bypasses RLS entirely: anyone viewing source would have unrestricted
+read and write. Never give a secret or `service_role` value a `NEXT_PUBLIC_`
+name.
 
 ### 3. Supabase dashboard
 
