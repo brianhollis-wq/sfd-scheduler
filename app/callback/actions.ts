@@ -3,6 +3,23 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { TABLES } from '@/lib/db/tables'
+import { adminGate } from '@/lib/auth/guard'
+
+/**
+ * What every action in this file returns.
+ *
+ * Declared explicitly rather than inferred. Without it the return type is a
+ * union of the success and failure shapes, and `result.error` stops
+ * type-checking on the pages that read it — which is exactly what happened when
+ * the administrator gate added another early return.
+ */
+export interface CallbackActionResult {
+  error?:          string
+  success?:        boolean
+  movedToBottom?:  boolean
+  newRank?:        number
+  newTimes?:       number
+}
 
 // Record a voluntary callback.
 // If isFullShift is true (20+ hours) the person moves to the bottom of the list.
@@ -13,7 +30,11 @@ export async function recordCallbackAction(
   fiscalYear: number,
   callbackDate: string,
   isFullShift: boolean,
-) {
+): Promise<CallbackActionResult> {
+  // Recording overtime changes a member's place on the list. Administrators only.
+  const denied = await adminGate()
+  if (denied) return denied
+
   const supabase = createAdminClient()
 
   if (!isFullShift) {
@@ -75,7 +96,11 @@ export async function recordCallbackAction(
 export async function setLastCallbackDateAction(
   listPositionId: string,
   callbackDate: string,
-) {
+): Promise<CallbackActionResult> {
+  // Recording overtime changes a member's place on the list. Administrators only.
+  const denied = await adminGate()
+  if (denied) return denied
+
   const supabase = createAdminClient()
 
   const { error } = await supabase

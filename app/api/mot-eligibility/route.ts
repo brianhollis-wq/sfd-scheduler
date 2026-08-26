@@ -6,6 +6,7 @@ import { TABLES } from '@/lib/db/tables'
 // replaces omitted that type, so light-duty members showed as OT-available.
 import { ON_DUTY_TYPES, leaveExclusionLabel } from '@/lib/schedule/assignment-types'
 import { ELIGIBILITY_COLUMNS } from '@/lib/schedule/daily-assignment'
+import { withUser } from '@/lib/auth/guard'
 
 // SFD Fiscal Year starts July 1
 // July (JS month 6) onward → FY = next calendar year
@@ -24,7 +25,7 @@ const MAND_LISTS = [
   { type: 'SRP_mand',                   label: 'SRP' },
 ]
 
-export async function GET(req: NextRequest) {
+export const GET = withUser<NextRequest>(async (req) => {
   const { searchParams } = new URL(req.url)
   const dateParam = searchParams.get('date')
 
@@ -126,4 +127,4 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ shiftDate, fiscalYear: fy, classifications })
-}
+})

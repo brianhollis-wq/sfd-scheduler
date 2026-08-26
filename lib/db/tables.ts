@@ -10,6 +10,7 @@
 
 export const TABLES = {
   apparatus:         'apparatus',
+  appUsers:          'app_users',
   dailyAssignments:  'daily_assignments',
   debitDays:         'debit_days',
   employees:         'employees',

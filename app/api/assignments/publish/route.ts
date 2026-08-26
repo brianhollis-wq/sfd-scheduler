@@ -36,6 +36,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { TABLES } from '@/lib/db/tables'
 import { buildDailyAssignmentRow } from '@/lib/schedule/daily-assignment'
 import { ON_DUTY_TYPES, LEAVE_TYPES, INTERN_TYPES } from '@/lib/schedule/assignment-types'
+import { withAdmin } from '@/lib/auth/guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -60,7 +61,7 @@ function isKnownAssignmentType(t: string): boolean {
   return ON_DUTY_TYPES.has(t) || LEAVE_TYPES.has(t) || INTERN_TYPES.has(t)
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withAdmin<NextRequest>(async (request) => {
   let body: PublishBody
   try {
     body = await request.json() as PublishBody
@@ -136,4 +137,4 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, inserted: count ?? rows.length })
-}
+})

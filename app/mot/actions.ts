@@ -3,6 +3,20 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { TABLES } from '@/lib/db/tables'
+import { adminGate } from '@/lib/auth/guard'
+
+/**
+ * What every action in this file returns.
+ *
+ * Declared explicitly rather than inferred, so `result.error` keeps
+ * type-checking on the page that reads it. See the note in callback/actions.ts.
+ */
+export interface MotActionResult {
+  error?:    string
+  success?:  boolean
+  newRank?:  number
+  newTimes?: number
+}
 
 // Record a mandate: moves the person to the bottom of the list and sets the date
 export async function recordMandateAction(
@@ -10,7 +24,11 @@ export async function recordMandateAction(
   listType: string,
   fiscalYear: number,
   mandateDate: string,
-) {
+): Promise<MotActionResult> {
+  // Recording overtime changes a member's place on the list. Administrators only.
+  const denied = await adminGate()
+  if (denied) return denied
+
   const supabase = createAdminClient()
 
   // Fetch current record
@@ -63,7 +81,11 @@ export async function recordMandateAction(
 export async function setLastMandatoryDateAction(
   listPositionId: number,
   mandateDate: string,
-) {
+): Promise<MotActionResult> {
+  // Recording overtime changes a member's place on the list. Administrators only.
+  const denied = await adminGate()
+  if (denied) return denied
+
   const supabase = createAdminClient()
 
   const { error } = await supabase

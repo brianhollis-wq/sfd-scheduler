@@ -8,11 +8,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TABLES } from '@/lib/db/tables'
+import { withUser } from '@/lib/auth/guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
+export const GET = withUser<NextRequest>(async (request) => {
   const { searchParams } = new URL(request.url)
   const q = searchParams.get('q')?.trim() ?? ''
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 50)
@@ -39,4 +40,4 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ employees: data ?? [] })
-}
+})

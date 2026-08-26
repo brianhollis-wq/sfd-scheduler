@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TABLES } from '@/lib/db/tables'
+import { withUser } from '@/lib/auth/guard'
 
 // SFD Fiscal Year starts July 1
 function fiscalYear(date: Date): number {
@@ -12,7 +13,7 @@ function fyEndDate(fy: number): string {
   return `${fy}-06-30`
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withUser<NextRequest>(async (req) => {
   const { searchParams } = new URL(req.url)
   const dateParam = searchParams.get('date')
 
@@ -77,4 +78,4 @@ export async function GET(req: NextRequest) {
     upcoming,
     byEmployee,
   })
-}
+})

@@ -43,11 +43,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TABLES } from '@/lib/db/tables'
+import { withUser } from '@/lib/auth/guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
+export const GET = withUser<NextRequest>(async (request) => {
   const { searchParams } = new URL(request.url)
   const dateParam = searchParams.get('date')
 
@@ -190,4 +191,4 @@ export async function GET(request: NextRequest) {
     shiftLetter,
     apparatuses,
   })
-}
+})

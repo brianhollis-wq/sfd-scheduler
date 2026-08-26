@@ -7,6 +7,7 @@ import {
   ELIGIBILITY_COLUMNS,
   ELIGIBILITY_HISTORY_COLUMNS,
 } from '@/lib/schedule/daily-assignment'
+import { withUser } from '@/lib/auth/guard'
 
 // SFD Fiscal Year starts July 1
 function fiscalYear(date: Date): number {
@@ -39,7 +40,7 @@ const MAX_HOURS_ROLLING  = 72   // can't exceed 72 hrs in rolling window
 const ROLLING_WINDOW     = 6    // look back 6 days (+ target = 7-day window)
 const MAX_CONSEC_DAYS    = 5    // more than 5 consecutive days = ineligible
 
-export async function GET(req: NextRequest) {
+export const GET = withUser<NextRequest>(async (req) => {
   const { searchParams } = new URL(req.url)
   const dateParam = searchParams.get('date')
 
@@ -217,4 +218,4 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ shiftDate, fiscalYear: fy, classifications })
-}
+})

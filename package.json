@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.3",
     "next": "14.2.35",
     "pdf-parse": "^2.4.5",
