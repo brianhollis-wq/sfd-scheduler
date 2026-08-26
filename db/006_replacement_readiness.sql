@@ -47,13 +47,22 @@ SELECT 'rotation_coverage', 'shift_rotation',
 -- Dates where the two tables disagree, or where only one of them has an entry.
 -- Expect zero rows. Anything here has to be resolved before the rotation can
 -- drive the schedule.
+--
+-- shift_letter is cast to text on both sides because the two tables do not
+-- even agree on its type — one is character, the other a shift_letter enum —
+-- and comparing them directly is an error, not a mismatch. That divergence is
+-- itself part of the answer to "is the rotation one source of truth", and the
+-- column types are listed in the shape check above.
+--
+-- character is blank-padded, so 'A'::character(1) compared as text against an
+-- unpadded value would differ on whitespace alone; btrim removes that.
 SELECT 'rotation_disagreement' AS check,
        COALESCE(c.shift_date, r.shift_date) AS shift_date,
-       c.shift_letter AS calendar_letter,
-       r.shift_letter AS rotation_letter
+       btrim(c.shift_letter::text) AS calendar_letter,
+       btrim(r.shift_letter::text) AS rotation_letter
   FROM shift_calendar c
   FULL OUTER JOIN shift_rotation r ON r.shift_date::date = c.shift_date::date
- WHERE c.shift_letter IS DISTINCT FROM r.shift_letter
+ WHERE btrim(c.shift_letter::text) IS DISTINCT FROM btrim(r.shift_letter::text)
  ORDER BY 2
  LIMIT 100;
 
@@ -70,14 +79,14 @@ SELECT 'rotation_runway' AS check,
 -- daily_assignments rows exist. If it is thin, the builder cannot stand in for
 -- the PDF no matter what else is built.
 SELECT 'roster_by_shift' AS check,
-       shift_letter,
+       btrim(shift_letter::text) AS shift_letter,
        COUNT(*)                                       AS positions,
        COUNT(employee_id)                             AS filled,
        COUNT(*) - COUNT(employee_id)                  AS vacant,
        COUNT(DISTINCT apparatus_id)                   AS apparatus_covered
   FROM shift_roster
- GROUP BY shift_letter
- ORDER BY shift_letter;
+ GROUP BY btrim(shift_letter::text)
+ ORDER BY btrim(shift_letter::text);
 
 -- Minimum-staffing apparatus with no roster row on a given shift letter. These
 -- are the holes that would appear on the board on day one.
@@ -87,7 +96,7 @@ WITH min_units(id) AS (
          ('M-1'),('M-2'),('M-3'),('M-4'),('M-5'),('M-7'),('M-9'),('M-10')
 ),
 letters(shift_letter) AS (
-  SELECT DISTINCT shift_letter FROM shift_roster
+  SELECT DISTINCT btrim(shift_letter::text) FROM shift_roster
 )
 SELECT 'roster_gaps' AS check, l.shift_letter, u.id AS apparatus_id
   FROM min_units u
@@ -95,7 +104,7 @@ SELECT 'roster_gaps' AS check, l.shift_letter, u.id AS apparatus_id
  WHERE NOT EXISTS (
          SELECT 1 FROM shift_roster r
           WHERE r.apparatus_id = u.id
-            AND r.shift_letter = l.shift_letter
+            AND btrim(r.shift_letter::text) = l.shift_letter
        )
  ORDER BY l.shift_letter, u.id;
 
@@ -117,13 +126,13 @@ SELECT 'roster_orphan_employee' AS check, r.employee_id, COUNT(*) AS rows
 -- Anyone rostered to two apparatus on the same shift letter. Every unit carries
 -- its own crew, so this should be empty.
 SELECT 'roster_double_booked' AS check,
-       r.shift_letter, r.employee_id, COUNT(*) AS rows,
+       btrim(r.shift_letter::text) AS shift_letter, r.employee_id, COUNT(*) AS rows,
        string_agg(r.apparatus_id, ', ' ORDER BY r.apparatus_id) AS apparatus
   FROM shift_roster r
  WHERE r.employee_id IS NOT NULL
- GROUP BY r.shift_letter, r.employee_id
+ GROUP BY btrim(r.shift_letter::text), r.employee_id
 HAVING COUNT(*) > 1
- ORDER BY r.shift_letter, r.employee_id;
+ ORDER BY 2, 3;
 
 -- ── 3. Employee records ──────────────────────────────────────────────────────
 -- The seat model matches on rank and on paramedic certification. A null in
@@ -142,11 +151,11 @@ SELECT 'employees_by_rank' AS check,
 -- Which shift each member belongs to. Needed to generate a day from the
 -- rotation rather than read it off the PDF.
 SELECT 'employees_by_shift' AS check,
-       COALESCE(shift_assignment::text, '(null)') AS shift_assignment,
+       COALESCE(btrim(shift_assignment::text), '(null)') AS shift_assignment,
        COUNT(*) AS rows
   FROM employees
- GROUP BY shift_assignment
- ORDER BY shift_assignment;
+ GROUP BY COALESCE(btrim(shift_assignment::text), '(null)')
+ ORDER BY 2;
 
 -- ── 4. Apparatus ─────────────────────────────────────────────────────────────
 SELECT 'apparatus' AS check,

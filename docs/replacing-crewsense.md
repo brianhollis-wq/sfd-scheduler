@@ -57,9 +57,14 @@ date X". The crew board reads the first; every other page reads the second. Whil
 the PDF carries the truth this is only a cosmetic risk. Generating the schedule
 makes the rotation the foundation, and a foundation cannot have two answers.
 
+They do not even agree on the column's type: `shift_calendar.shift_letter` is
+`character`, `shift_rotation.shift_letter` is a `shift_letter` enum. Comparing
+them is a type error rather than a mismatch, which is how the divergence stayed
+invisible — nothing in the application ever reads both.
+
 Pick one, migrate the readers, drop the other. Then populate it years forward,
-Kelly days included. `db/006_replacement_readiness.sql` reports the disagreement
-and how far the rotation currently runs.
+Kelly days included. `db/006_replacement_readiness.sql` reports whether the two
+currently disagree on any date, and how far the rotation runs.
 
 ### 1. Prove the roster can stand alone
 
