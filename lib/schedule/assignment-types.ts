@@ -13,7 +13,23 @@
 
 // ── The vocabulary ────────────────────────────────────────────────────────────
 
-/** Types written when a member is working the shift. */
+/**
+ * Types written when a member is working the shift.
+ *
+ * The codes below the first six came from a CrewSense report export, which
+ * carries 26 distinct type codes against the 17 this file used to model —
+ * 105 of 646 rows in one week could not be represented at all.
+ *
+ * `overtime` and `callback_voluntary` are deliberately separate. The export
+ * distinguishes "Overtime [OT]" from "Overtime [OT] (CallBack Shift)", and
+ * the data shows what the difference is: every callback row is a full 24-hour
+ * vacancy on a line apparatus filled by somebody on a day off, while plain
+ * overtime is partial coverage — 2, 4, 10 and 13.5-hour rows, mostly on medic
+ * units and the peak medics. That is the same line recordCallbackAction draws
+ * when it moves a member to the bottom of the list for a full shift but only
+ * stamps the date for a partial one, so flattening the two would lose a
+ * distinction the overtime lists already depend on.
+ */
 export const ON_DUTY_ASSIGNMENT_TYPES = [
   'regular',
   'callback_voluntary',
@@ -21,6 +37,12 @@ export const ON_DUTY_ASSIGNMENT_TYPES = [
   'peak_engine',
   'trade',
   'light_duty',
+  'overtime',        // Overtime [OT] — partial coverage, medic and peak units
+  'double_time',     // Double Time [DT]
+  'debit_relief',    // Debit Day Relief, and DEBIT DAY BC RELIEF
+  'on_call_dfm',     // On Call DFM [OnCall]
+  'qi_committee',    // QI Committee [QI] — at work, off the apparatus
+  'training',        // Training [TRNG] — at work, off the apparatus
 ] as const
 
 /**
@@ -39,6 +61,17 @@ export const LEAVE_ASSIGNMENT_TYPES = [
   'WOC',
   'AIC',
   'BUM',
+  // From the CrewSense export. PFML is kept separate from FMLA and OFLA
+  // rather than folded into either, because the three are separate
+  // entitlements and are accrued and reported separately.
+  'PFML',            // Paid Family & Medical Leave
+  'LTD',             // Long Term Disability
+  'STL',             // Short Term Leave
+  'PTO_vacation',    // PTO - Vacation, distinct from the vacation bank
+  'PTO_sick',        // PTO - Sick Leave
+  'bereavement',
+  'union_leave',
+  'jury_duty',
 ] as const
 
 /** Non-department personnel tracked for accountability, never for staffing. */
@@ -67,6 +100,8 @@ export const OT_TYPES = new Set<string>([
   'callback_voluntary',
   'callback_mandatory',
   'peak_engine',
+  'overtime',
+  'double_time',
 ])
 
 /**
@@ -81,7 +116,13 @@ export const OT_TYPES = new Set<string>([
  * predicates. Roster displays list these members (they are present and
  * accounted for); anything compared against a staffing minimum must not.
  */
-export const NON_STAFFING_ON_DUTY_TYPES = new Set<string>(['light_duty'])
+export const NON_STAFFING_ON_DUTY_TYPES = new Set<string>([
+  'light_duty',
+  // At work and unavailable for overtime, but not on an apparatus, so they
+  // fill no seat — the same reason light duty is here.
+  'qi_committee',
+  'training',
+])
 
 // ── Predicates ────────────────────────────────────────────────────────────────
 
@@ -136,6 +177,20 @@ export const ASSIGNMENT_LABELS: Record<string, string> = {
   WOC:                'WOC',
   AIC:                'AIC',
   BUM:                'BUM',
+  overtime:           'Overtime',
+  double_time:        'Double Time',
+  debit_relief:       'Debit Relief',
+  on_call_dfm:        'On-Call DFM',
+  qi_committee:       'QI Committee',
+  training:           'Training',
+  PFML:               'PFML',
+  LTD:                'Long Term Disability',
+  STL:                'Short Term Leave',
+  PTO_vacation:       'PTO Vacation',
+  PTO_sick:           'PTO Sick',
+  bereavement:        'Bereavement',
+  union_leave:        'Union Leave',
+  jury_duty:          'Jury Duty',
 }
 
 export function assignmentLabel(assignmentType: string): string {
@@ -169,8 +224,10 @@ export const LEAVE_TYPE_OPTIONS = LEAVE_ASSIGNMENT_TYPES.map((value) => ({
 export const ASSIGNABLE_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   'callback_voluntary',
   'callback_mandatory',
+  'overtime',
   'peak_engine',
   'trade',
+  'debit_relief',
   'regular',
   'ccc_intern',
 ].map((value) => ({ value, label: assignmentLabel(value) }))

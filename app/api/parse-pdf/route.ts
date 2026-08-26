@@ -13,6 +13,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { TABLES } from '@/lib/db/tables'
 import { findEmployee, type EmployeeRow } from '@/lib/employees/find'
 import { withAdmin } from '@/lib/auth/guard'
+import { displayName } from '@/lib/employees/display'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -157,7 +158,7 @@ export const POST = withAdmin<NextRequest>(async (request) => {
         employeeId:      isCccIntern ? null : (emp?.id ?? null),
         employeeDisplay: isCccIntern
           ? `${row.firstName} ${row.lastName} (CCC Intern)`
-          : emp ? `${emp.first_name} ${emp.last_name}` : null,
+          : emp ? displayName(emp) : null,
         matched:         !!emp,
         isCccIntern,
       })

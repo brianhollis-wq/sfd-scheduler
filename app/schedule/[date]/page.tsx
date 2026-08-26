@@ -24,6 +24,7 @@ interface PageProps {
 type EmployeeRow = {
   id: number
   first_name: string
+  nickname:   string | null
   last_name: string
   rank: string
   badge_number: string
@@ -137,7 +138,7 @@ async function getRosterForDate(date: string): Promise<{
   if (employeeIds.length > 0) {
     const { data: empRows, error: empErr } = await supabase
       .from(TABLES.employees)
-      .select('id, first_name, last_name, rank, badge_number, is_paramedic, shift_assignment')
+      .select('id, first_name, last_name, nickname, rank, badge_number, is_paramedic, shift_assignment')
       .in('id', employeeIds)
 
     if (empErr) throw new Error(empErr.message)

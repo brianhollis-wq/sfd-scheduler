@@ -22,12 +22,14 @@ import {
 import { apparatusCountsTowardMinimum } from '@/lib/schedule/apparatus'
 import { rankLabel } from '@/lib/employees/rank'
 import { assessStaffing } from '@/lib/schedule/staffing'
+import { displayShortName, displayListName } from '@/lib/employees/display'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface EmployeeOption {
   id: number
   first_name: string
+  nickname:   string | null
   last_name: string
   rank: string
   badge_number: string
@@ -172,7 +174,7 @@ function EmployeeSearchModal({
                 className="w-full text-left px-3 py-2 rounded bg-neutral-800/50 hover:bg-neutral-700 border border-transparent hover:border-neutral-600 transition-colors">
                 <div className="flex items-center gap-2">
                   <span className="text-[#c9a84c] text-xs font-mono w-14 shrink-0">{rankLabel(emp.rank)}</span>
-                  <span className="text-neutral-200 text-xs font-mono flex-1">{emp.last_name}, {emp.first_name}</span>
+                  <span className="text-neutral-200 text-xs font-mono flex-1">{displayListName(emp)}</span>
                   {emp.is_paramedic && <span className="text-blue-400 text-[9px] font-bold">PM</span>}
                   <span className="text-neutral-600 text-[10px] font-mono">{emp.shift_assignment}</span>
                 </div>
@@ -294,7 +296,7 @@ function ApparatusCard({
                   {/* Name */}
                   <span className={`flex-1 ${isLeave ? 'line-through text-neutral-600' : isIntern ? 'text-neutral-400' : 'text-neutral-200'}`}>
                     {pos.employee
-                      ? `${pos.employee.last_name}, ${pos.employee.first_name.charAt(0)}.`
+                      ? displayShortName(pos.employee)
                       : <span className="text-amber-500/60 not-italic">▸ open vacancy</span>}
                   </span>
 

@@ -95,6 +95,7 @@ export const GET = withUser<NextRequest>(async (request) => {
       employees (
         id,
         first_name,
+        nickname,
         last_name,
         rank,
         badge_number,

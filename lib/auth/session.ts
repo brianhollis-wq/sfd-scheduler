@@ -25,6 +25,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TABLES } from '@/lib/db/tables'
 import { supabaseUrl, supabaseAnonKey } from './env'
+import { displayName } from '@/lib/employees/display'
 
 export type AppRole = 'admin' | 'viewer'
 
@@ -122,12 +123,11 @@ export async function lookupAppUser(
   if (row.employee_id != null) {
     const { data: emp } = await admin
       .from(TABLES.employees)
-      .select('first_name, last_name')
+      .select('first_name, last_name, nickname')
       .eq('id', row.employee_id)
       .maybeSingle()
     if (emp) {
-      const e = emp as { first_name: string; last_name: string }
-      fullName = `${e.first_name} ${e.last_name}`
+      fullName = displayName(emp as { first_name: string; last_name: string; nickname: string | null })
     }
   }
 

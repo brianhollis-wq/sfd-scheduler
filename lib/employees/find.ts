@@ -90,7 +90,21 @@ export async function findEmployee(
     .maybeSingle()
   if (exact) return exact as EmployeeRow
 
-  // 2. Nickname expansion (Zach → Zachary, Jeff → Jeffrey, etc.)
+  // 2. The member's own recorded nickname.
+  //    Since db/009 the go-by name is stored on the employee record, so the
+  //    name a schedule prints usually matches it directly. This runs ahead of
+  //    the static map because it is the department's own answer rather than a
+  //    general guess, and it needs no maintenance as people come and go.
+  const { data: byNickname } = await supabase
+    .from(TABLES.employees)
+    .select('id, first_name, last_name')
+    .ilike('nickname', firstName)
+    .ilike('last_name', lastName)
+    .limit(1)
+    .maybeSingle()
+  if (byNickname) return byNickname as EmployeeRow
+
+  // 3. Nickname expansion (Zach → Zachary, Jeff → Jeffrey, etc.)
   const altFirstNames = NICKNAME_MAP[firstName] ?? []
   for (const alt of altFirstNames) {
     const { data } = await supabase
@@ -103,7 +117,7 @@ export async function findEmployee(
     if (data) return data as EmployeeRow
   }
 
-  // 3. Hyphen normalization: Sanchez-Lopez → Sanchez Lopez
+  // 4. Hyphen normalization: Sanchez-Lopez → Sanchez Lopez
   if (lastName.includes('-')) {
     const normalized = lastName.replace(/-/g, ' ')
     const { data } = await supabase
@@ -115,7 +129,7 @@ export async function findEmployee(
       .maybeSingle()
     if (data) return data as EmployeeRow
 
-    // 4. Nickname + hyphen normalization combined
+    // 5. Nickname + hyphen normalization combined
     for (const alt of altFirstNames) {
       const { data: d2 } = await supabase
         .from(TABLES.employees)
@@ -128,7 +142,7 @@ export async function findEmployee(
     }
   }
 
-  // 5. Shortened surname: "David Olvera" → David Olvera-Godinez.
+  // 6. Shortened surname: "David Olvera" → David Olvera-Godinez.
   //    The mirror of rule 3. The schedule prints the first half of a
   //    hyphenated surname while the personnel master carries it in full, so
   //    neither an exact match nor hyphen normalization can reach the record.
@@ -147,7 +161,7 @@ export async function findEmployee(
     if (extensions?.length === 1) return extensions[0] as EmployeeRow
   }
 
-  // 6. name_aliases table — catches edge cases like "Alex Beaudoin" → John Beaudoin,
+  // 7. name_aliases table — catches edge cases like "Alex Beaudoin" → John Beaudoin,
   //    "David Olvera" → David Olvera-Godinez, CCC interns, etc.
   //    Schema: name_aliases(alias text PK, employee_id int FK employees.id)
   const alias = `${firstName} ${lastName}`.trim()

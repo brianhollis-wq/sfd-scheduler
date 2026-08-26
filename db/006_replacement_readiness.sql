@@ -1,184 +1,179 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 006 — Readiness assessment for running the schedule without the PDF
 --
--- READ ONLY. Every statement is a SELECT; nothing is created, altered or
--- deleted. Safe to run any number of times.
+-- READ ONLY. One statement, one result set; nothing is created or changed.
+-- Safe to run any number of times.
 --
--- Run in the Supabase SQL editor and paste the output back. It answers the
--- questions the replacement plan depends on and that cannot be answered from
--- the code alone:
+-- Written as a single UNION rather than a series of SELECTs because the
+-- Supabase SQL editor shows only the last statement's output: an earlier
+-- version of this file ran all thirteen checks and displayed one of them.
 --
+-- Every value is rendered as text so unrelated checks can share a shape. Read
+-- it as: check | item | detail.
+--
+-- It answers what the code cannot:
 --   1. Is the shift rotation one source of truth, and how far forward does it go?
 --   2. Is shift_roster complete enough to seed a day without the PDF?
 --   3. Do the employee records carry what the seat model needs?
---   4. Is the apparatus table's minimum staffing set?
---   5. Are the overtime lists live?
---
--- Each block is labelled in a `check` column so the results stay readable when
--- pasted back as one run.
+--   4. Is minimum staffing set on the apparatus?
+--   5. Are the overtime lists live, and who has been writing the board?
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- ── 0. Table shapes ──────────────────────────────────────────────────────────
--- Listed first because the queries below use only the columns the application
--- reads. Anything extra shows up here rather than being guessed at.
-SELECT 'shape' AS check, table_name, column_name, data_type, is_nullable
-  FROM information_schema.columns
- WHERE table_schema = current_schema()
-   AND table_name IN ('shift_calendar', 'shift_rotation', 'shift_roster', 'ot_list_positions')
- ORDER BY table_name, ordinal_position;
-
--- ── 1. Shift rotation ────────────────────────────────────────────────────────
--- Two tables answer "which shift letter works on date X": the crew board reads
--- shift_rotation, every other page reads shift_calendar. While the PDF carries
--- the truth that only risks a cosmetic mismatch. Generating the schedule makes
--- the rotation the foundation, and a foundation cannot have two answers.
-SELECT 'rotation_coverage' AS check,
-       'shift_calendar' AS source,
-       COUNT(*)          AS rows,
-       MIN(shift_date)   AS first_date,
-       MAX(shift_date)   AS last_date,
-       COUNT(DISTINCT shift_letter) AS distinct_letters
-  FROM shift_calendar
-UNION ALL
-SELECT 'rotation_coverage', 'shift_rotation',
-       COUNT(*), MIN(shift_date), MAX(shift_date), COUNT(DISTINCT shift_letter)
-  FROM shift_rotation;
-
--- Dates where the two tables disagree, or where only one of them has an entry.
--- Expect zero rows. Anything here has to be resolved before the rotation can
--- drive the schedule.
-SELECT 'rotation_disagreement' AS check,
-       COALESCE(c.shift_date, r.shift_date) AS shift_date,
-       c.shift_letter AS calendar_letter,
-       r.shift_letter AS rotation_letter
-  FROM shift_calendar c
-  FULL OUTER JOIN shift_rotation r ON r.shift_date::date = c.shift_date::date
- WHERE c.shift_letter IS DISTINCT FROM r.shift_letter
- ORDER BY 2
- LIMIT 100;
-
--- How far forward the rotation is populated from today.
--- shift_date is cast explicitly: the column may be stored as date or as text,
--- and subtracting a date from text is an error rather than a wrong answer.
-SELECT 'rotation_runway' AS check,
-       MAX(shift_date::date)                  AS last_date,
-       MAX(shift_date::date) - CURRENT_DATE   AS days_ahead
-  FROM shift_calendar;
-
--- ── 2. Permanent roster ──────────────────────────────────────────────────────
--- shift_roster is what the schedule builder seeds a day from when no
--- daily_assignments rows exist. If it is thin, the builder cannot stand in for
--- the PDF no matter what else is built.
-SELECT 'roster_by_shift' AS check,
-       shift_letter,
-       COUNT(*)                                       AS positions,
-       COUNT(employee_id)                             AS filled,
-       COUNT(*) - COUNT(employee_id)                  AS vacant,
-       COUNT(DISTINCT apparatus_id)                   AS apparatus_covered
-  FROM shift_roster
- GROUP BY shift_letter
- ORDER BY shift_letter;
-
--- Minimum-staffing apparatus with no roster row on a given shift letter. These
--- are the holes that would appear on the board on day one.
 WITH min_units(id) AS (
   VALUES ('E-1'),('E-2'),('E-3'),('E-4'),('E-5'),('E-6'),('E-7'),('E-8'),
          ('E-9'),('E-10'),('E-11'),('TR-2'),('TR-4'),('BC-2'),('BC-4'),
          ('M-1'),('M-2'),('M-3'),('M-4'),('M-5'),('M-7'),('M-9'),('M-10')
 ),
 letters(shift_letter) AS (
-  SELECT DISTINCT shift_letter FROM shift_roster
+  SELECT DISTINCT btrim(shift_letter::text) FROM shift_roster
 )
-SELECT 'roster_gaps' AS check, l.shift_letter, u.id AS apparatus_id
-  FROM min_units u
- CROSS JOIN letters l
- WHERE NOT EXISTS (
-         SELECT 1 FROM shift_roster r
-          WHERE r.apparatus_id = u.id
-            AND r.shift_letter = l.shift_letter
-       )
- ORDER BY l.shift_letter, u.id;
 
--- Roster rows pointing at an apparatus that does not exist.
-SELECT 'roster_orphan_apparatus' AS check, r.apparatus_id, COUNT(*) AS rows
-  FROM shift_roster r
- WHERE NOT EXISTS (SELECT 1 FROM apparatus a WHERE a.id = r.apparatus_id)
- GROUP BY r.apparatus_id
- ORDER BY r.apparatus_id;
+SELECT ord, "check", item, detail FROM (
 
--- Roster rows pointing at an employee that does not exist.
-SELECT 'roster_orphan_employee' AS check, r.employee_id, COUNT(*) AS rows
-  FROM shift_roster r
- WHERE r.employee_id IS NOT NULL
-   AND NOT EXISTS (SELECT 1 FROM employees e WHERE e.id = r.employee_id)
- GROUP BY r.employee_id
- ORDER BY r.employee_id;
+  -- ── 1. Column types ────────────────────────────────────────────────────────
+  -- The two rotation tables disagree on shift_letter's type: one is character,
+  -- the other a shift_letter enum. Comparing them is an error rather than a
+  -- mismatch, which is how the divergence went unnoticed — nothing reads both.
+  SELECT 10 AS ord, 'column_types' AS "check",
+         (table_name || '.' || column_name) AS item,
+         data_type AS detail
+    FROM information_schema.columns
+   WHERE table_schema = current_schema()
+     AND table_name IN ('shift_calendar','shift_rotation','shift_roster')
+     AND column_name IN ('shift_date','shift_letter')
 
--- Anyone rostered to two apparatus on the same shift letter. Every unit carries
--- its own crew, so this should be empty.
-SELECT 'roster_double_booked' AS check,
-       r.shift_letter, r.employee_id, COUNT(*) AS rows,
-       string_agg(r.apparatus_id, ', ' ORDER BY r.apparatus_id) AS apparatus
-  FROM shift_roster r
- WHERE r.employee_id IS NOT NULL
- GROUP BY r.shift_letter, r.employee_id
-HAVING COUNT(*) > 1
- ORDER BY r.shift_letter, r.employee_id;
+  -- ── 2. Rotation coverage ───────────────────────────────────────────────────
+  UNION ALL
+  SELECT 20, 'rotation_coverage', 'shift_calendar',
+         COUNT(*)::text || ' rows, ' ||
+         COALESCE(MIN(shift_date)::text,'—') || ' to ' || COALESCE(MAX(shift_date)::text,'—') ||
+         ', ' || COUNT(DISTINCT btrim(shift_letter::text))::text || ' letters'
+    FROM shift_calendar
 
--- ── 3. Employee records ──────────────────────────────────────────────────────
--- The seat model matches on rank and on paramedic certification. A null in
--- either makes that person unable to hold a seat, so the unit reads short.
-SELECT 'employees_total' AS check, COUNT(*) AS rows FROM employees;
+  UNION ALL
+  SELECT 21, 'rotation_coverage', 'shift_rotation',
+         COUNT(*)::text || ' rows, ' ||
+         COALESCE(MIN(shift_date)::text,'—') || ' to ' || COALESCE(MAX(shift_date)::text,'—') ||
+         ', ' || COUNT(DISTINCT btrim(shift_letter::text))::text || ' letters'
+    FROM shift_rotation
 
-SELECT 'employees_by_rank' AS check,
-       COALESCE(rank::text, '(null)') AS rank,
-       COUNT(*)                       AS rows,
-       COUNT(*) FILTER (WHERE is_paramedic IS TRUE)  AS paramedic,
-       COUNT(*) FILTER (WHERE is_paramedic IS NULL)  AS paramedic_unknown
-  FROM employees
- GROUP BY rank
- ORDER BY rank;
+  -- How far forward the rotation is populated. A schedule cannot be generated
+  -- past this date.
+  UNION ALL
+  SELECT 25, 'rotation_runway', 'shift_calendar',
+         COALESCE(MAX(shift_date::date)::text,'—') || '  (' ||
+         COALESCE((MAX(shift_date::date) - CURRENT_DATE)::text,'—') || ' days ahead)'
+    FROM shift_calendar
 
--- Which shift each member belongs to. Needed to generate a day from the
--- rotation rather than read it off the PDF.
-SELECT 'employees_by_shift' AS check,
-       COALESCE(shift_assignment::text, '(null)') AS shift_assignment,
-       COUNT(*) AS rows
-  FROM employees
- GROUP BY shift_assignment
- ORDER BY shift_assignment;
+  -- ── 3. Rotation disagreements ──────────────────────────────────────────────
+  -- Expect none. Cast to text because the columns are different types, and
+  -- trimmed because character is blank-padded.
+  UNION ALL
+  SELECT 30, 'rotation_disagreement',
+         COALESCE(c.shift_date, r.shift_date)::text,
+         'calendar=' || COALESCE(btrim(c.shift_letter::text),'(missing)') ||
+         '  rotation=' || COALESCE(btrim(r.shift_letter::text),'(missing)')
+    FROM shift_calendar c
+    FULL OUTER JOIN shift_rotation r ON r.shift_date::date = c.shift_date::date
+   WHERE btrim(c.shift_letter::text) IS DISTINCT FROM btrim(r.shift_letter::text)
 
--- ── 4. Apparatus ─────────────────────────────────────────────────────────────
-SELECT 'apparatus' AS check,
-       COALESCE(type::text, '(null)')   AS type,
-       COUNT(*)                          AS rows,
-       COUNT(*) FILTER (WHERE min_staffing IS NULL OR min_staffing = 0) AS missing_min_staffing
-  FROM apparatus
- GROUP BY type
- ORDER BY type;
+  -- ── 4. Permanent roster ────────────────────────────────────────────────────
+  -- What the schedule builder seeds a day from when no daily rows exist. If
+  -- this is thin, the builder cannot stand in for the PDF.
+  UNION ALL
+  SELECT 40, 'roster_total', 'shift_roster', COUNT(*)::text || ' rows' FROM shift_roster
 
--- ── 5. Overtime lists ────────────────────────────────────────────────────────
--- The callback and mandatory-OT pages already keep these ordered. Confirms they
--- hold live data for the current fiscal year rather than a stale import.
-SELECT 'ot_lists' AS check,
-       list_type,
-       fiscal_year,
-       COUNT(*)                                    AS entries,
-       COUNT(*) FILTER (WHERE is_active)           AS active,
-       MAX(last_mandatory_date)                    AS most_recent_callback
-  FROM ot_list_positions
- GROUP BY list_type, fiscal_year
- ORDER BY fiscal_year DESC, list_type;
+  UNION ALL
+  SELECT 41, 'roster_by_shift', btrim(shift_letter::text),
+         COUNT(*)::text || ' positions, ' ||
+         COUNT(employee_id)::text || ' filled, ' ||
+         (COUNT(*) - COUNT(employee_id))::text || ' vacant, ' ||
+         COUNT(DISTINCT apparatus_id)::text || ' apparatus'
+    FROM shift_roster
+   GROUP BY btrim(shift_letter::text)
 
--- ── 6. What the board is running on today ────────────────────────────────────
--- published_by distinguishes a day that came from the PDF importer from one the
--- schedule builder produced. During the parallel run this is how progress is
--- measured.
-SELECT 'assignment_sources' AS check,
-       shift_date,
-       COALESCE(published_by, '(null)') AS published_by,
-       COUNT(*) AS rows
-  FROM daily_assignments
- GROUP BY shift_date, published_by
- ORDER BY shift_date DESC, published_by
- LIMIT 60;
+  -- Minimum-staffing apparatus with no roster row on a shift letter: the holes
+  -- that would appear on the board on day one.
+  UNION ALL
+  SELECT 50, 'roster_gap', l.shift_letter || ' ' || u.id, 'no roster row'
+    FROM min_units u CROSS JOIN letters l
+   WHERE NOT EXISTS (
+           SELECT 1 FROM shift_roster r
+            WHERE r.apparatus_id = u.id
+              AND btrim(r.shift_letter::text) = l.shift_letter)
+
+  UNION ALL
+  SELECT 60, 'roster_orphan_apparatus', r.apparatus_id, COUNT(*)::text || ' rows'
+    FROM shift_roster r
+   WHERE NOT EXISTS (SELECT 1 FROM apparatus a WHERE a.id = r.apparatus_id)
+   GROUP BY r.apparatus_id
+
+  UNION ALL
+  SELECT 61, 'roster_orphan_employee', r.employee_id::text, COUNT(*)::text || ' rows'
+    FROM shift_roster r
+   WHERE r.employee_id IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM employees e WHERE e.id = r.employee_id)
+   GROUP BY r.employee_id
+
+  -- Every unit carries its own crew, so nobody should hold two seats on one
+  -- shift letter.
+  UNION ALL
+  SELECT 70, 'roster_double_booked',
+         btrim(r.shift_letter::text) || ' emp ' || r.employee_id::text,
+         string_agg(r.apparatus_id, ', ' ORDER BY r.apparatus_id)
+    FROM shift_roster r
+   WHERE r.employee_id IS NOT NULL
+   GROUP BY btrim(r.shift_letter::text), r.employee_id
+  HAVING COUNT(*) > 1
+
+  -- ── 5. Employee records ────────────────────────────────────────────────────
+  -- The seat model matches on rank and paramedic certification; a null in
+  -- either makes that person unable to hold a seat, so the unit reads short.
+  UNION ALL
+  SELECT 80, 'employees_total', 'all', COUNT(*)::text FROM employees
+
+  UNION ALL
+  SELECT 81, 'employees_by_rank', COALESCE(btrim(rank::text),'(null)'),
+         COUNT(*)::text || ' (' ||
+         COUNT(*) FILTER (WHERE is_paramedic IS TRUE)::text || ' paramedic, ' ||
+         COUNT(*) FILTER (WHERE is_paramedic IS NULL)::text || ' unknown)'
+    FROM employees
+   GROUP BY COALESCE(btrim(rank::text),'(null)')
+
+  -- Which shift each member belongs to: needed to generate a day from the
+  -- rotation rather than read it off the PDF.
+  UNION ALL
+  SELECT 85, 'employees_by_shift', COALESCE(btrim(shift_assignment::text),'(null)'), COUNT(*)::text
+    FROM employees
+   GROUP BY COALESCE(btrim(shift_assignment::text),'(null)')
+
+  -- ── 6. Apparatus ───────────────────────────────────────────────────────────
+  UNION ALL
+  SELECT 90, 'apparatus', COALESCE(btrim(type::text),'(null)'),
+         COUNT(*)::text || ' units, ' ||
+         COUNT(*) FILTER (WHERE min_staffing IS NULL OR min_staffing = 0)::text ||
+         ' missing min_staffing'
+    FROM apparatus
+   GROUP BY COALESCE(btrim(type::text),'(null)')
+
+  -- ── 7. Overtime lists ──────────────────────────────────────────────────────
+  UNION ALL
+  SELECT 95, 'ot_lists', list_type || ' FY' || fiscal_year::text,
+         COUNT(*)::text || ' entries, ' ||
+         COUNT(*) FILTER (WHERE is_active)::text || ' active, last ' ||
+         COALESCE(MAX(last_mandatory_date)::text,'never')
+    FROM ot_list_positions
+   GROUP BY list_type, fiscal_year
+
+  -- ── 8. Who has been writing the board ──────────────────────────────────────
+  -- published_by separates a day the PDF importer produced from one the
+  -- schedule builder produced. During the parallel run this is the progress
+  -- measure; today it should show no builder-written days at all.
+  UNION ALL
+  SELECT 99, 'assignment_source', shift_date::text || ' ' || COALESCE(published_by,'(null)'),
+         COUNT(*)::text || ' rows'
+    FROM daily_assignments
+   GROUP BY shift_date, published_by
+
+) t
+ORDER BY ord, item;
