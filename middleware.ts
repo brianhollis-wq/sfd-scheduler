@@ -23,6 +23,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { supabaseUrl, supabaseAnonKey } from '@/lib/auth/env'
 
 /** Paths reachable without signing in. */
 const PUBLIC_PATHS = [
@@ -39,8 +40,8 @@ export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl(),
+    supabaseAnonKey(),
     {
       cookies: {
         get(name: string) {
