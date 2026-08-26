@@ -8,6 +8,7 @@ import {
   ELIGIBILITY_HISTORY_COLUMNS,
 } from '@/lib/schedule/daily-assignment'
 import { withUser } from '@/lib/auth/guard'
+import { displayName } from '@/lib/employees/display'
 
 // SFD Fiscal Year starts July 1
 function fiscalYear(date: Date): number {
@@ -145,6 +146,7 @@ export const GET = withUser<NextRequest>(async (req) => {
         times_mandatoried,
         employees (
           first_name,
+          nickname,
           last_name,
           rank,
           shift_assignment
@@ -198,7 +200,7 @@ export const GET = withUser<NextRequest>(async (req) => {
       return {
         id:               m.id,
         employeeId:       empId,
-        name:             `${emp?.first_name ?? ''} ${emp?.last_name ?? ''}`.trim(),
+        name:             emp ? displayName(emp) : '',
         rank:             emp?.rank ?? '',
         shift:            emp?.shift_assignment ?? '',
         listPosition:     m.mandatory_rank,

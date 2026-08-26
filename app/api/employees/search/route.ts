@@ -29,7 +29,7 @@ export const GET = withUser<NextRequest>(async (request) => {
 
   const { data, error } = await supabase
     .from(TABLES.employees)
-    .select('id, first_name, last_name, rank, badge_number, is_paramedic, shift_assignment')
+    .select('id, first_name, last_name, nickname, rank, badge_number, is_paramedic, shift_assignment')
     .or(`last_name.ilike.${pattern},first_name.ilike.${pattern}`)
     .order('last_name')
     .order('first_name')

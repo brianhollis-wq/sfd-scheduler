@@ -21,6 +21,7 @@ import {
   temporaryAssignmentLabel,
   isOnTemporaryAssignment,
 } from '@/lib/schedule/apparatus'
+import { displayShortName } from '@/lib/employees/display'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ type Assignment = {
   end_dt: string | null
   employees: {
     first_name: string
+    nickname:   string | null
     last_name: string
     rank: string
     badge_number: string
@@ -326,7 +328,7 @@ function ApparatusCard({ app, compact, at }: { app: AppWithCrew; compact?: boole
                   </span>
                   <span className={`flex-1 ${a.employees ? 'text-zinc-200' : 'text-amber-500/70 italic'}`}>
                     {a.employees
-                      ? `${a.employees.last_name}, ${a.employees.first_name.charAt(0)}.`
+                      ? displayShortName(a.employees)
                       : 'VACANT'}
                   </span>
                   {a.employees?.is_paramedic && (
@@ -371,7 +373,7 @@ function ApparatusCard({ app, compact, at }: { app: AppWithCrew; compact?: boole
                   <span className="text-purple-400/80 w-14 shrink-0">INTERN</span>
                   <span className="text-zinc-400 flex-1">
                     {a.employees
-                      ? `${a.employees.last_name}, ${a.employees.first_name.charAt(0)}.`
+                      ? displayShortName(a.employees)
                       : '—'}
                   </span>
                   <span className="text-[9px] font-mono font-bold text-purple-500/70 tracking-widest">CCC</span>
@@ -531,7 +533,7 @@ function PersonnelView({ assignments, debitRows }: {
                 {onDuty.map((a, i) => (
                   <tr key={`${a.employee_id}-${i}`} className="hover:bg-zinc-900/40">
                     <td className={`${td} text-zinc-200 font-semibold`}>
-                      {a.employees!.last_name}, {a.employees!.first_name.charAt(0)}.
+                      {displayShortName(a.employees!)}
                     </td>
                     <td className={`${td} text-[#c9a84c]`}>{rankLabel(a.employees!.rank)}</td>
                     <td className={`${td} text-zinc-300 font-mono tracking-widest`}>{a.apparatus_id || '—'}</td>
@@ -574,7 +576,7 @@ function PersonnelView({ assignments, debitRows }: {
                 {onLeave.map((a, i) => (
                   <tr key={`${a.employee_id}-${i}`} className="hover:bg-zinc-900/40">
                     <td className={`${td} text-zinc-200 font-semibold`}>
-                      {a.employees!.last_name}, {a.employees!.first_name.charAt(0)}.
+                      {displayShortName(a.employees!)}
                     </td>
                     <td className={`${td} text-[#c9a84c]`}>{rankLabel(a.employees!.rank)}</td>
                     <td className={`${td} text-amber-300/80`}>

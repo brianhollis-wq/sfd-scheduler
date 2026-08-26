@@ -7,6 +7,7 @@ import { TABLES } from '@/lib/db/tables'
 import { ON_DUTY_TYPES, leaveExclusionLabel } from '@/lib/schedule/assignment-types'
 import { ELIGIBILITY_COLUMNS } from '@/lib/schedule/daily-assignment'
 import { withUser } from '@/lib/auth/guard'
+import { displayName } from '@/lib/employees/display'
 
 // SFD Fiscal Year starts July 1
 // July (JS month 6) onward → FY = next calendar year
@@ -71,6 +72,7 @@ export const GET = withUser<NextRequest>(async (req) => {
         times_mandatoried,
         employees (
           first_name,
+          nickname,
           last_name,
           rank,
           shift_assignment
@@ -107,7 +109,7 @@ export const GET = withUser<NextRequest>(async (req) => {
       return {
         id:                m.id,
         employeeId:        m.employee_id,
-        name:              `${emp?.first_name ?? ''} ${emp?.last_name ?? ''}`.trim(),
+        name:              emp ? displayName(emp) : '',
         rank:              emp?.rank ?? '',
         shift:             emp?.shift_assignment ?? '',
         listPosition:      m.mandatory_rank,
