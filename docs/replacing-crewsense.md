@@ -66,7 +66,28 @@ Pick one, migrate the readers, drop the other. Then populate it years forward,
 Kelly days included. `db/006_replacement_readiness.sql` reports whether the two
 currently disagree on any date, and how far the rotation runs.
 
-### 1. Prove the roster can stand alone
+### 1. Prove the roster can stand alone — **roster loaded**
+
+`db/008` fills `shift_roster` from the department's own SFD SHIFT LIST: 207
+positions across the four shifts, against the 121 that were there. 181 are
+linked to a person; the rest are seats the list itself shows vacant, plus three
+names the personnel master does not carry.
+
+Three things the shift list does not say, resolved there and worth remembering:
+
+- **The rig at stations 2 and 4 is not a roster property.** Each station lists
+  two people per rank who alternate between the engine and the truck, and the
+  assignment moves day to day when someone is off — Riesterer and Crofts were
+  on ENGINE 2 on 08/19 and TRUCK 2 on 08/23 because their engineer was on a
+  trade. The roster holds a starting point taken from the most recent real day;
+  the day's schedule overrides it.
+- **Station 8 has no permanent crew.** It reads DEBIT for captain and engineer
+  on every shift, so those seats are filled from the debit list.
+- **MEDIC 1, MEDIC 9 and REACH 1 are day-pattern units**, not shift units. They
+  run ALPHA/BRAVO crews on TU-W-TH-F and M-TU-W-TH, so they belong in
+  `lib/schedule/admin-roster.ts`, not `shift_roster`.
+
+What remains of this stage is the comparison itself:
 
 Before building workflows, find out what is not yet known. Import the PDF as
 usual *and* generate the same day from `shift_roster`, then diff them. Every
@@ -78,6 +99,29 @@ difference is one of three things:
 
 This converts "what are we missing" from guesswork into a list, and it is the
 cheapest step here. Build it as a page, not a script, so it can be checked daily.
+
+### 1b. Import from the CrewSense export rather than the PDF
+
+A CrewSense report export (CSV) turned out to carry everything the PDF does and
+more: explicit shift letter, explicit apparatus, real start and end timestamps,
+and a type code per row. Every parser defect fixed in this project exists only
+because the PDF is a layout rather than data — column positions, wrapped
+surnames, clock ranges with no date.
+
+It also revealed that the type vocabulary was too narrow: the export uses 26
+codes where this application modelled 17, and 105 of 646 rows in a single week
+could not be represented. `lib/schedule/assignment-types.ts` now covers them.
+Two distinctions worth keeping in mind:
+
+- `overtime` and `callback_voluntary` are separate. Callback is a full 24-hour
+  vacancy on a line apparatus filled by somebody on a day off; plain overtime is
+  partial coverage, mostly medic and peak units. That is the same line the
+  overtime lists already draw between a full shift and a partial one.
+- `PFML` is separate from `FMLA` and `OFLA` — three distinct entitlements,
+  accrued and reported separately.
+
+Building the importer is the next piece of work, and it is what actually ends
+the dependency on uploading PDFs.
 
 ### 2. Authentication and identity — **built**
 
