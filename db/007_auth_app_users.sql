@@ -126,20 +126,21 @@ CREATE TRIGGER app_users_touch
 --
 -- Linked to the employee record by email where the address matches, so the
 -- account is attributed to a person rather than standing alone.
--- The employee link is resolved by address first and falls back to the id from
--- the personnel master, checked against the name so a reused id cannot attach
--- this account to the wrong person. If neither matches, the account is still
--- created — it just is not tied to an employee record yet.
+-- The employee link is resolved by id from the personnel master, checked
+-- against the name so a reused or mistyped id cannot attach this account to
+-- the wrong person. If it does not match, the account is still created — it
+-- just is not tied to an employee record yet.
+--
+-- Note there is no employees.email to match on: the personnel master carries
+-- city addresses but the table does not, so app_users.email is the only place
+-- an address is stored. Matching on it here is what an earlier draft did, and
+-- it failed with "column e.email does not exist".
 INSERT INTO app_users (email, employee_id, role, invited_by)
 SELECT 'bhollis@cityofsalem.net',
-       COALESCE(
-         (SELECT e.id FROM employees e
-           WHERE lower(e.email) = 'bhollis@cityofsalem.net' LIMIT 1),
-         (SELECT e.id FROM employees e
-           WHERE e.id = 3107
-             AND lower(e.first_name) = 'brian'
-             AND lower(e.last_name)  = 'hollis' LIMIT 1)
-       ),
+       (SELECT e.id FROM employees e
+         WHERE e.id = 3107
+           AND lower(e.first_name) = 'brian'
+           AND lower(e.last_name)  = 'hollis' LIMIT 1),
        'admin',
        'db/007'
 ON CONFLICT (email) DO UPDATE

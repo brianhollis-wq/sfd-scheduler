@@ -62,7 +62,8 @@ allowlist says no, the session just created is torn down.
 ### 1. Run the migration
 
 `db/007_auth_app_users.sql` creates `app_users`, enables RLS on it, and seeds the
-first administrator (`bhollis@cityofsalem.net`). Without that seed nobody can
+first administrator (`bhollis@cityofsalem.net`, linked to employee 3107 by id
+and name). Without that seed nobody can
 sign in, including whoever runs the file — sign-in requires an active row, and
 only the service role may create one.
 
@@ -98,12 +99,32 @@ a real SMTP sender under **Authentication → Emails**.
 There is no self-service sign-up, by design. Adding someone is an administrative
 act performed with the service role:
 
+The `employees` table has no email column — the personnel master carries city
+addresses but the database does not — so `app_users.email` is the only place a
+sign-in address is stored, and the employee is identified by id. The name check
+is there so a mistyped id cannot quietly attach an account to the wrong person:
+if it does not match, the row is still created with no employee link rather
+than the wrong one.
+
 ```sql
 INSERT INTO app_users (email, employee_id, role, invited_by)
-SELECT 'jsmith@cityofsalem.net', e.id, 'viewer', 'brian'
-  FROM employees e
- WHERE lower(e.email) = 'jsmith@cityofsalem.net'
-ON CONFLICT (email) DO UPDATE SET is_active = true;
+SELECT 'jsmith@cityofsalem.net',
+       (SELECT e.id FROM employees e
+         WHERE e.id = 1234
+           AND lower(e.first_name) = 'john'
+           AND lower(e.last_name)  = 'smith'),
+       'viewer',
+       'brian'
+ON CONFLICT (email) DO UPDATE
+  SET is_active   = true,
+      employee_id = COALESCE(app_users.employee_id, EXCLUDED.employee_id);
+```
+
+Find the id first if you don't know it:
+
+```sql
+SELECT id, first_name, last_name, rank FROM employees
+ WHERE lower(last_name) = 'smith' ORDER BY first_name;
 ```
 
 Revoking:
