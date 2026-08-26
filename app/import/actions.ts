@@ -17,6 +17,7 @@ import {
 } from '@/lib/schedule/daily-assignment'
 import { permanentRosterForDate, windowForEntry } from '@/lib/schedule/admin-roster'
 import { findEmployee, type AdminClient } from '@/lib/employees/find'
+import { adminGate } from '@/lib/auth/guard'
 
 // ────────────────────────────────────────────────────────────────
 // Types shared with the client
@@ -157,6 +158,10 @@ export async function commitScheduleAction(
   rows: PreviewRow[],
 ): Promise<CommitResult> {
   try {
+    // Committing replaces every assignment for the date. Administrators only.
+    const denied = await adminGate()
+    if (denied) return { inserted: 0, skipped: 0, error: denied.error }
+
     const supabase = createAdminClient()
 
     // Delete all existing assignments for this date

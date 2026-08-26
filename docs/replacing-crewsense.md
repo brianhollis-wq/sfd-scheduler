@@ -74,19 +74,25 @@ difference is one of three things:
 This converts "what are we missing" from guesswork into a list, and it is the
 cheapest step here. Build it as a page, not a script, so it can be checked daily.
 
-### 2. Authentication and identity
+### 2. Authentication and identity — **built**
 
-There is none today: a single Supabase client with the service-role key, no
-middleware, no login. Everything runs with full admin rights.
+Magic-link sign-in to the member's city address, with an `app_users` allowlist
+deciding who may actually use the application. Roles are `admin` and `viewer`,
+with unused scope columns so the officer and BC tiers arrive as a policy change
+rather than a migration. Every API route and server action is gated
+independently of the middleware. See `docs/authentication.md`.
 
-That is acceptable for a board one person drives. It is not acceptable for a
-system of record where a member requests leave or accepts a callback. This stage
-is a hard prerequisite for stages 3-5 and cannot be deferred past them:
+Two pieces of this stage remain and belong with the workflow that first needs
+them:
 
-- accounts tied to `employees.id`,
-- roles (member, company officer, battalion chief, administrator),
-- an audit trail of who changed what and when,
-- row-level security, so the service-role key stops being the only credential.
+- **Row level security on the domain tables.** They are still read and written
+  with the service-role key, which bypasses RLS. Safe today because no path
+  reaches them without passing a guard, but the rules live in the application
+  rather than the database. This is a prerequisite for members reaching their
+  own data directly.
+- **Recording who changed a row.** The guards resolve the acting user and hand
+  it to each route, so the information is available; no table stores it yet.
+  This should land with leave requests (stage 3).
 
 ### 3. Leave requests and approval
 

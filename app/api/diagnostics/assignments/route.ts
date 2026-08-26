@@ -14,11 +14,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TABLES } from '@/lib/db/tables'
 import { CREW_BOARD_COLUMNS, SCHEDULE_BUILDER_COLUMNS } from '@/lib/schedule/daily-assignment'
+import { withAdmin } from '@/lib/auth/guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
+export const GET = withAdmin<NextRequest>(async (request) => {
   const supabase = createAdminClient()
   const date = new URL(request.url).searchParams.get('date') ?? undefined
 
@@ -81,4 +82,4 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(result, { headers: { 'cache-control': 'no-store' } })
-}
+})

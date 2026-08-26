@@ -12,6 +12,7 @@ import { parseScheduleText } from '@/lib/parse-schedule'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TABLES } from '@/lib/db/tables'
 import { findEmployee, type EmployeeRow } from '@/lib/employees/find'
+import { withAdmin } from '@/lib/auth/guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -117,7 +118,7 @@ async function extractPDFText(buffer: Buffer): Promise<string> {
 
 // ── Route handler ─────────────────────────────────────────────────
 
-export async function POST(request: NextRequest) {
+export const POST = withAdmin<NextRequest>(async (request) => {
   try {
     const formData = await request.formData()
     const file = formData.get('pdf') as File | null
@@ -174,4 +175,4 @@ export async function POST(request: NextRequest) {
     console.error('[parse-pdf]', msg)
     return NextResponse.json({ error: `Parse failed: ${msg}` }, { status: 500 })
   }
-}
+})
